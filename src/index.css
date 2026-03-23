@@ -1,0 +1,218 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Thuast Font — RapidTool Logo Font */
+@font-face {
+  font-family: 'Thuast';
+  src: url('/fonts/Thuast.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Force show number input spinners */
+input[type='number'] {
+  min-height: 28px !important;
+  -moz-appearance: number-input !important;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: inner-spin-button !important;
+  opacity: 1 !important;
+  height: 80% !important;
+  position: absolute !important;
+  top: 10% !important;
+  right: 2px !important;
+  cursor: pointer !important;
+  margin: 0 !important;
+}
+
+/* RapidTool Design System — Professional 3D Viewer Theme */
+@layer base {
+  :root {
+    /* Professional Light Theme */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 198 89% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 27 96% 61%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 198 89% 50%;
+    --success: 142 76% 47%;
+    --success-foreground: 210 40% 98%;
+    --warning: 47 96% 53%;
+    --warning-foreground: 210 40% 98%;
+
+    /* Technical Gradients — Light */
+    --gradient-mesh: linear-gradient(135deg, hsl(210 40% 98%), hsl(214.3 31.8% 91.4%));
+    --gradient-tech: linear-gradient(135deg, hsl(198 89% 50% / 0.05), hsl(27 96% 61% / 0.05));
+    --gradient-glass: linear-gradient(135deg, hsl(0 0% 100% / 0.8), hsl(0 0% 100% / 0.4));
+
+    /* 3D Viewer — Light */
+    --viewer-bg: 210 40% 98%;
+    --viewer-grid: 214.3 31.8% 91.4%;
+    --viewer-axis-x: 0 84% 60%;
+    --viewer-axis-y: 120 84% 50%;
+    --viewer-axis-z: 240 84% 60%;
+
+    /* Technical Shadows — Light */
+    --shadow-soft: 0 4px 12px hsl(0 0% 0% / 0.1);
+    --shadow-tech: 0 8px 32px hsl(198 89% 50% / 0.08);
+    --shadow-glow: 0 0 24px hsl(198 89% 50% / 0.15);
+    --radius: 0.75rem;
+
+    /* Sidebar Design — Light */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222.2 84% 4.9%;
+    --sidebar-primary: 198 89% 50%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222.2 84% 4.9%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-ring: 198 89% 50%;
+
+    /* Technical Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-tech: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .dark {
+    /* Professional Dark Theme */
+    --background: 220 13% 8%;
+    --foreground: 210 40% 98%;
+    --card: 220 13% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 13% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 198 89% 50%;
+    --primary-foreground: 220 13% 8%;
+    --secondary: 220 13% 14%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 13% 16%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 27 96% 61%;
+    --accent-foreground: 220 13% 8%;
+    --destructive: 0 62.8% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 18%;
+    --input: 220 13% 16%;
+    --ring: 198 89% 50%;
+    --success: 142 76% 47%;
+    --success-foreground: 220 13% 8%;
+    --warning: 47 96% 53%;
+    --warning-foreground: 220 13% 8%;
+
+    /* Technical Gradients — Dark */
+    --gradient-mesh: linear-gradient(135deg, hsl(220 13% 10%), hsl(220 13% 8%));
+    --gradient-tech: linear-gradient(135deg, hsl(198 89% 50% / 0.1), hsl(27 96% 61% / 0.1));
+    --gradient-glass: linear-gradient(135deg, hsl(210 40% 98% / 0.05), hsl(210 40% 98% / 0.02));
+
+    /* 3D Viewer — Dark */
+    --viewer-bg: 220 13% 6%;
+    --viewer-grid: 220 13% 20%;
+    --viewer-axis-x: 0 84% 60%;
+    --viewer-axis-y: 120 84% 50%;
+    --viewer-axis-z: 240 84% 60%;
+
+    /* Technical Shadows — Dark */
+    --shadow-soft: 0 4px 12px hsl(220 13% 4% / 0.3);
+    --shadow-tech: 0 8px 32px hsl(198 89% 50% / 0.1);
+    --shadow-glow: 0 0 24px hsl(198 89% 50% / 0.2);
+
+    /* Sidebar Design — Dark */
+    --sidebar-background: 220 13% 12%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 198 89% 50%;
+    --sidebar-primary-foreground: 220 13% 8%;
+    --sidebar-accent: 220 13% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 13% 18%;
+    --sidebar-ring: 198 89% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans overflow-hidden;
+  }
+
+  /* Technical UI Elements */
+  .tech-glass {
+    background: var(--gradient-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .tech-glow:hover {
+    box-shadow: 0 0 12px hsl(var(--ring) / 0.3);
+  }
+
+  .tech-transition {
+    transition: var(--transition-tech);
+  }
+
+  .font-tech {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Consolas', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-thuast {
+    font-family: 'Thuast', system-ui, sans-serif;
+  }
+
+  /* Custom animations */
+  @keyframes pulse-tech {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes spin-smooth {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .animate-pulse-tech {
+    animation: pulse-tech 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-spin-smooth {
+    animation: spin-smooth 1s linear infinite;
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
