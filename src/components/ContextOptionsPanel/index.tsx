@@ -1,15 +1,8 @@
 /**
  * ContextOptionsPanel — Step-based workflow panel
  *
- * Renders the active step's content with a rich step header, help text,
- * skip capabilities, and navigation controls.
- *
- * Matches Fixture's ContextOptionsPanel structure:
- *   - Step header: icon badge + title + description + processing spinner
- *   - StepProgress bar (inline)
- *   - SkipStep button for optional steps
- *   - Scrollable step content area
- *   - WorkflowNavigation (step mini-map + back/next) pinned at bottom
+ * Dispatches to the correct feature component for each workflow step
+ * via a STEP_COMPONENTS map, replacing the earlier StepPlaceholder.
  */
 
 import React from 'react';
@@ -23,8 +16,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useWorkflow } from '@/hooks/useWorkflow';
-import { STEP_CONFIG } from '@/workflow';
-import { SOFTJAWS_WORKFLOW_STEPS } from '@/workflow';
+import { STEP_CONFIG, SOFTJAWS_WORKFLOW_STEPS } from '@/workflow';
 import type { SoftJawsWorkflowStep } from '@/workflow';
 import {
   CollapsiblePanel,
@@ -34,19 +26,40 @@ import {
 } from '@rapidtool/cad-ui';
 import type { StepDefinition } from '@rapidtool/cad-ui';
 
-// ─── Step Icon Map ───────────────────────────────────────────────────────────
+// Feature step components
+import { ImportStepContent }       from '@/features/import';
+import { ViseConfigStepContent }   from '@/features/vise-config';
+import { JawBlankStepContent }     from '@/features/jaw-blank';
+import { JawProfileStepContent }   from '@/features/jaw-profile';
+import { GripFeaturesStepContent } from '@/features/grip-features';
+import { MountingHolesStepContent } from '@/features/mounting-holes';
+import { ExportStepContent }       from '@/features/export';
+
+// ─── Step Icon Map ─────────────────────────────────────────────────────────────────
 
 const STEP_ICONS: Record<SoftJawsWorkflowStep, React.FC<{ className?: string }>> = {
-  'import': Upload,
-  'vise-config': Settings,
-  'jaw-blank': Box,
-  'jaw-profile': Wrench,
-  'grip-features': Grip,
+  'import':         Upload,
+  'vise-config':    Settings,
+  'jaw-blank':      Box,
+  'jaw-profile':    Wrench,
+  'grip-features':  Grip,
   'mounting-holes': CircleDot,
-  'export': Download,
+  'export':         Download,
 };
 
-// ─── Step definitions for WorkflowNavigation ─────────────────────────────────
+// ─── Step Component Map ────────────────────────────────────────────────────────
+
+const STEP_COMPONENTS: Record<SoftJawsWorkflowStep, React.FC> = {
+  'import':         ImportStepContent,
+  'vise-config':    ViseConfigStepContent,
+  'jaw-blank':      JawBlankStepContent,
+  'jaw-profile':    JawProfileStepContent,
+  'grip-features':  GripFeaturesStepContent,
+  'mounting-holes': MountingHolesStepContent,
+  'export':         ExportStepContent,
+};
+
+// ─── Step definitions for WorkflowNavigation ──────────────────────────────────
 
 const WORKFLOW_STEP_DEFS: StepDefinition[] = SOFTJAWS_WORKFLOW_STEPS.map((stepId) => {
   const meta = STEP_CONFIG[stepId];
@@ -59,25 +72,7 @@ const WORKFLOW_STEP_DEFS: StepDefinition[] = SOFTJAWS_WORKFLOW_STEPS.map((stepId
   };
 });
 
-// ─── Placeholder Step Content ─────────────────────────────────────────────────
-
-function StepPlaceholder({ stepId }: { stepId: string }) {
-  const meta = STEP_CONFIG[stepId as keyof typeof STEP_CONFIG];
-  if (!meta) return null;
-
-  return (
-    <div className="p-4 space-y-4">
-      <div className="p-4 bg-white/[0.03] rounded-md border border-dashed border-border text-center text-muted-foreground text-[11px]">
-        <div className="text-2xl mb-2">🚧</div>
-        Step content will be implemented in
-        <br />
-        <code className="text-primary">features/{stepId}/</code>
-      </div>
-    </div>
-  );
-}
-
-// ─── ContextOptionsPanel ──────────────────────────────────────────────────────
+// ─── ContextOptionsPanel ────────────────────────────────────────────────────────
 
 export function ContextOptionsPanel() {
   const {
@@ -97,13 +92,14 @@ export function ContextOptionsPanel() {
 
   if (!currentStep || !currentStepMeta) return null;
 
-  const StepIcon = STEP_ICONS[currentStep];
+  const StepIcon       = STEP_ICONS[currentStep];
+  const StepContent    = STEP_COMPONENTS[currentStep];
   const completedCount = completedSteps.length;
-  const skippedCount = skippedSteps.length;
+  const skippedCount   = skippedSteps.length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* ── Step Header ──────────────────────────────────────────────── */}
+      {/* ── Step Header ──────────────────────────────────────────── */}
       <div className="p-4 border-b border-border/50">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
@@ -119,7 +115,6 @@ export function ContextOptionsPanel() {
           </div>
         </div>
 
-        {/* Progress bar */}
         <StepProgress
           currentStep={currentStepIndex + 1}
           totalSteps={totalSteps}
@@ -128,7 +123,6 @@ export function ContextOptionsPanel() {
           barHeight={6}
         />
 
-        {/* Skip button for optional steps */}
         {currentStepMeta.skippable && (
           <div className="mt-3">
             <SkipStep onSkip={skipAndAdvance} />
@@ -136,20 +130,18 @@ export function ContextOptionsPanel() {
         )}
       </div>
 
-      {/* ── Step Content (scrollable) ────────────────────────────── */}
+      {/* ── Step Content (scrollable) ───────────────────────────── */}
       <div className="flex-1 overflow-auto min-h-0">
-        {/* Help text accordion */}
         <CollapsiblePanel title="Help" defaultOpen={false}>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {currentStepMeta.helpText}
           </p>
         </CollapsiblePanel>
 
-        {/* Step-specific content */}
-        <StepPlaceholder stepId={currentStep} />
+        <StepContent />
       </div>
 
-      {/* ── Workflow Navigation (bottom-pinned) ──────────────────── */}
+      {/* ── Workflow Navigation (bottom-pinned) ────────────────────── */}
       <WorkflowNavigation
         steps={WORKFLOW_STEP_DEFS}
         currentStep={currentStep}
