@@ -1,12 +1,12 @@
-import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
+import { Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { Button } from '@rapidtool/cad-ui';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from '@rapidtool/cad-ui';
 
 export function ThemeToggle() {
   const { setTheme } = useTheme();
@@ -21,13 +21,13 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="tech-glass">
-        <DropdownMenuItem onClick={() => setTheme("light")} className="tech-transition">
+        <DropdownMenuItem onClick={() => setTheme('light')} className="tech-transition">
           Light
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")} className="tech-transition">
+        <DropdownMenuItem onClick={() => setTheme('dark')} className="tech-transition">
           Dark
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")} className="tech-transition">
+        <DropdownMenuItem onClick={() => setTheme('system')} className="tech-transition">
           System
         </DropdownMenuItem>
       </DropdownMenuContent>
