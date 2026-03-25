@@ -8,6 +8,7 @@ import { immer } from 'zustand/middleware/immer';
 import type {
   SoftJawsState,
   ProcessedPart,
+  ViseConfig,
   JawBlankConfig,
   JawProfileConfig,
   GripFeaturesConfig,
@@ -18,6 +19,12 @@ import type {
 const INITIAL_STATE: SoftJawsState = {
   parts: [],
   activePart: null,
+  viseConfig: {
+    type: 'kurt-d60',
+    jawWidth: 152.4,  // 6"
+    jawHeight: 38.1,  // 1.5"
+    jawStroke: 152.4, // 6"
+  },
   jawBlank: {
     width: 150,
     height: 50,
@@ -50,6 +57,7 @@ export interface SoftJawsActions {
   addPart: (part: ProcessedPart) => void;
   removePart: (id: string) => void;
   setActivePart: (id: string | null) => void;
+  updateViseConfig: (config: Partial<ViseConfig>) => void;
   updateJawBlank: (config: Partial<JawBlankConfig>) => void;
   updateJawProfile: (config: Partial<JawProfileConfig>) => void;
   updateGripFeatures: (config: Partial<GripFeaturesConfig>) => void;
@@ -82,6 +90,11 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
       setActivePart: (id) =>
         set((state) => {
           state.activePart = id;
+        }),
+
+      updateViseConfig: (config) =>
+        set((state) => {
+          Object.assign(state.viseConfig, config);
         }),
 
       updateJawBlank: (config) =>
