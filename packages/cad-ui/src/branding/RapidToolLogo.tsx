@@ -15,22 +15,7 @@
  */
 
 import React from 'react';
-
-// ─── Inline SVG: Lightning bolt (replaces Lucide Zap) ────────────────────────
-
-const ZapIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-  </svg>
-);
+import { Zap } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +76,7 @@ export const RapidToolLogo: React.FC<RapidToolLogoProps> = ({
           <span className="text-foreground">Rapid</span>
           <span className="text-primary">Tool</span>
         </div>
-        <ZapIcon className={`${config.icon} text-amber-500 fill-amber-500 flex-shrink-0`} />
+        <Zap className={`${config.icon} text-amber-500 fill-amber-500 flex-shrink-0`} />
       </div>
 
       {showSubscript && subscript && (
