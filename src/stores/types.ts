@@ -17,6 +17,23 @@ export interface ProcessedPart {
   };
 }
 
+/** Known vise form-factors with standard jaw width/stroke specs */
+export type ViseType =
+  | 'kurt-d60'
+  | 'kurt-d688'
+  | 'schunk-ksr-125'
+  | 'schunk-ksr-160'
+  | 'glacern-gmc-606'
+  | 'custom';
+
+export interface ViseConfig {
+  type: ViseType;
+  jawWidth: number;   // mm — jaw face width
+  jawHeight: number;  // mm — jaw face height
+  jawStroke: number;  // mm — max opening
+  customName?: string; // label when type === 'custom'
+}
+
 export interface JawBlankConfig {
   width: number;
   height: number;
@@ -51,6 +68,7 @@ export interface ExportConfig {
 export interface SoftJawsState {
   parts: ProcessedPart[];
   activePart: string | null;
+  viseConfig: ViseConfig;
   jawBlank: JawBlankConfig;
   jawProfile: JawProfileConfig;
   gripFeatures: GripFeaturesConfig;

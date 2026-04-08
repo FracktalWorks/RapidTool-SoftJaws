@@ -1,8 +1,8 @@
-﻿/**
+/**
  * @rapidtool/cad-ui
- * 
+ *
  * Reusable React components for building internal applications.
- * 
+ *
  * Features:
  * - Layout: DashboardLayout with configurable header, sidebar, footer
  * - Sidebar: SidebarIcon, SidebarIconGroup for navigation
@@ -12,6 +12,7 @@
  * - Primitives: NumberInput, PositionControl, RotationControl
  * - Stores: Selection, Workflow, UI, History state management
  * - Navigation: Workflow step management utilities
+ * - UI Primitives: Accordion, Badge, Button, DropdownMenu (shadcn)
  */
 
 // Layout - Dashboard shell with header, sidebar, footer
@@ -46,3 +47,6 @@ export * from './branding';
 
 // Stores - Zustand state management
 export * from './stores';
+
+// UI Primitives - shadcn/ui components (Accordion, Badge, Button, DropdownMenu)
+export * from './components/ui';
