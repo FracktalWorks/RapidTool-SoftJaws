@@ -11,9 +11,12 @@ import {
   SidebarIcon,
   SidebarIconGroup,
   ViewOrientationControls,
+  useWorkflowStore,
 } from '@rapidtool/cad-ui';
 import { RapidToolLogo } from '@/components/RapidToolLogo';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { geometryCache } from '@/stores/geometryCache';
 import {
   Upload,
   Settings,
@@ -49,19 +52,25 @@ const STEP_ICONS: Record<SoftJawsWorkflowStep, React.FC<{ className?: string }>>
 // ─── Header Content ──────────────────────────────────────────────────────────
 
 function AppHeader() {
+  // Undo/redo stacks — disabled until useHistoryStore is wired up (Task 7+)
   const [undoStack] = useState<unknown[]>([]);
   const [redoStack] = useState<unknown[]>([]);
 
   const handleUndo = useCallback(() => {
-    // Will be connected to history store
+    // TODO: connect to useHistoryStore when implemented
   }, []);
 
   const handleRedo = useCallback(() => {
-    // Will be connected to history store
+    // TODO: connect to useHistoryStore when implemented
   }, []);
 
   const handleResetSession = useCallback(() => {
-    // Will reset all stores to initial state
+    // 1. Clear all non-serializable geometry from the module-level cache
+    geometryCache.clear();
+    // 2. Reset domain store to initial state (parts, jaw config, export, etc.)
+    useSoftJawsStore.getState().reset();
+    // 3. Navigate workflow back to the first step
+    useWorkflowStore.getState().goToStep('vise-config');
   }, []);
 
   const handleSetOrientation = useCallback((orientation: string) => {

@@ -1,10 +1,6 @@
-/**
- * Soft Jaws Workflow Steps
- */
-
 export const SOFTJAWS_WORKFLOW_STEPS = [
-  'import',
   'vise-config',
+  'import',
   'jaw-blank',
   'jaw-profile',
   'grip-features',

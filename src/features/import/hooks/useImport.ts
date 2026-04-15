@@ -27,7 +27,14 @@ export function useImport() {
     try {
       const result = await parseSTL(file);
       geometryCache.set(result.meta.id, result.geometry);
-      addPart(result.meta);
+      // Inject a zero transform — user adjusts via PropertiesPanel
+      addPart({
+        ...result.meta,
+        transform: {
+          position: { x: 0, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse file.');
     } finally {

@@ -5,7 +5,7 @@
  * for each domain entity (Parts, Vise, Jaw Blank, Jaw Profile, Grip, Holes).
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Accordion,
   AccordionContent,
@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { PositionControl, RotationControl } from '@rapidtool/cad-ui';
 import type { Position3D, Rotation3D } from '@rapidtool/cad-ui';
-import { Cog, Box, Wrench, Grip, CircleDot, Eye, EyeOff, Trash2, FileBox, Settings } from 'lucide-react';
+import { Box, CircleDot, Cog, FileBox, Grip, Settings, Trash2, Wrench } from 'lucide-react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import type { ProcessedPart } from '@/stores/types';
 
@@ -83,17 +83,48 @@ function PartItem({
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const [position, setPosition] = useState<Position3D>({ x: 0, y: 0, z: 0 });
-  const [rotation, setRotation] = useState<Rotation3D>({ x: 0, y: 0, z: 0 });
+  const updatePartTransform = useSoftJawsStore((s) => s.updatePartTransform);
+
+  // Mirror store values into local controlled state so PositionControl /
+  // RotationControl stay in sync if the store is reset externally.
+  const [position, setPosition] = useState<Position3D>(part.transform.position);
+  const [rotation, setRotation] = useState<Rotation3D>(part.transform.rotation);
+
+  // Keep local state in sync when the store resets (e.g. full session reset)
+  useEffect(() => {
+    setPosition(part.transform.position);
+    setRotation(part.transform.rotation);
+  }, [part.transform]);
 
   const handlePositionChange = useCallback(
-    (axis: 'x' | 'y' | 'z', value: number) => setPosition((p) => ({ ...p, [axis]: value })),
-    []
+    (axis: 'x' | 'y' | 'z', value: number) => {
+      const next = { ...position, [axis]: value };
+      setPosition(next);
+      updatePartTransform(part.id, { position: next });
+    },
+    [position, part.id, updatePartTransform],
   );
+
   const handleRotationChange = useCallback(
-    (axis: 'x' | 'y' | 'z', value: number) => setRotation((p) => ({ ...p, [axis]: value })),
-    []
+    (axis: 'x' | 'y' | 'z', value: number) => {
+      const next = { ...rotation, [axis]: value };
+      setRotation(next);
+      updatePartTransform(part.id, { rotation: next });
+    },
+    [rotation, part.id, updatePartTransform],
   );
+
+  const handleResetPosition = useCallback(() => {
+    const zero = { x: 0, y: 0, z: 0 };
+    setPosition(zero);
+    updatePartTransform(part.id, { position: zero });
+  }, [part.id, updatePartTransform]);
+
+  const handleResetRotation = useCallback(() => {
+    const zero = { x: 0, y: 0, z: 0 };
+    setRotation(zero);
+    updatePartTransform(part.id, { rotation: zero });
+  }, [part.id, updatePartTransform]);
 
   const dx = (part.boundingBox.max[0] - part.boundingBox.min[0]).toFixed(1);
   const dy = (part.boundingBox.max[1] - part.boundingBox.min[1]).toFixed(1);
@@ -105,24 +136,30 @@ function PartItem({
         isSelected ? 'border-primary/50 bg-primary/5' : 'border-border/30 hover:border-border/60'
       }`}
     >
-      <button
-        onClick={() => onSelect(part.id)}
-        className="w-full flex items-center gap-2 p-2 text-left"
-      >
-        <FileBox className="w-4 h-4 text-primary flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-foreground truncate">{part.name}</p>
-          <p className="text-[10px] text-muted-foreground font-tech">
-            {part.faceCount.toLocaleString()} tris
-          </p>
-        </div>
+      {/* Header row — two sibling buttons, NOT nested */}
+      <div className="flex items-center gap-2 p-2">
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove(part.id); }}
-          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 tech-transition"
+          type="button"
+          onClick={() => onSelect(part.id)}
+          className="flex flex-1 items-center gap-2 min-w-0 text-left"
+        >
+          <FileBox className="w-4 h-4 text-primary flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground truncate">{part.name}</p>
+            <p className="text-[10px] text-muted-foreground font-tech">
+              {part.faceCount.toLocaleString()} tris
+            </p>
+          </div>
+        </button>
+        <button
+          type="button"
+          title="Remove part"
+          onClick={() => onRemove(part.id)}
+          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 tech-transition"
         >
           <Trash2 className="w-3 h-3" />
         </button>
-      </button>
+      </div>
 
       {isSelected && (
         <div className="px-2 pb-2 space-y-3 border-t border-border/30">
@@ -132,14 +169,14 @@ function PartItem({
           <PositionControl
             position={position}
             onChange={handlePositionChange}
-            onReset={() => setPosition({ x: 0, y: 0, z: 0 })}
+            onReset={handleResetPosition}
             step={0.1}
             label="Position (mm)"
           />
           <RotationControl
             rotation={rotation}
             onChange={handleRotationChange}
-            onReset={() => setRotation({ x: 0, y: 0, z: 0 })}
+            onReset={handleResetRotation}
             step={1}
             label="Rotation (°)"
           />
