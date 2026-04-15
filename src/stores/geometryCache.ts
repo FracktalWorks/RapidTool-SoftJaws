@@ -21,3 +21,6 @@ export interface CachedGeometry {
  * Remove entries via geometryCache.delete(partId) when a part is removed.
  */
 export const geometryCache = new Map<string, CachedGeometry>();
+
+/** Reserved key for the jaw profile CSG result */
+export const JAW_PROFILE_CACHE_KEY = 'jaw-profile-result';

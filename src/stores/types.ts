@@ -4,6 +4,13 @@
 
 import type { SoftJawsWorkflowStep } from '@/workflow/steps';
 
+/** XYZ position offset applied to a part mesh in the scene (mm). */
+export interface PartTransform {
+  position: { x: number; y: number; z: number };
+  /** Euler angles in degrees (applied in XYZ order). */
+  rotation: { x: number; y: number; z: number };
+}
+
 export interface ProcessedPart {
   id: string;
   name: string;
@@ -15,6 +22,8 @@ export interface ProcessedPart {
     min: [number, number, number];
     max: [number, number, number];
   };
+  /** User-applied transform; defaults to zero position and rotation. */
+  transform: PartTransform;
 }
 
 /** Known vise form-factors with standard jaw width/stroke specs */
@@ -24,13 +33,19 @@ export type ViseType =
   | 'schunk-ksr-125'
   | 'schunk-ksr-160'
   | 'glacern-gmc-606'
+  | 'three-jaw-chuck'
+  | 'four-jaw-chuck'
+  | 'six-jaw-chuck'
   | 'custom';
 
 export interface ViseConfig {
   type: ViseType;
+  jawCount: number;   // 2 for vises, 3/4/6 for chucks
   jawWidth: number;   // mm — jaw face width
   jawHeight: number;  // mm — jaw face height
   jawStroke: number;  // mm — max opening
+  tSlotWidth?: number;    // mm - for mounting holes
+  tSlotSpacing?: number;  // mm
   customName?: string; // label when type === 'custom'
 }
 

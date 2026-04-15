@@ -16,7 +16,7 @@ export function App() {
     // Configure the shared workflow store with soft jaws steps
     useWorkflowStore.getState().configure({
       steps: [...SOFTJAWS_WORKFLOW_STEPS],
-      initialStep: 'import',
+      initialStep: 'vise-config',
     });
   }, []);
 
