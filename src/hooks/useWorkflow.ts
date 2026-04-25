@@ -21,7 +21,10 @@ export function useWorkflow() {
     [store]
   );
 
-  const nextStep = useCallback(() => store.nextStep(), [store]);
+  const nextStep = useCallback(() => {
+    if (currentStep) store.completeStep(currentStep);
+    store.nextStep();
+  }, [store, currentStep]);
   const prevStep = useCallback(() => store.prevStep(), [store]);
 
   const completeAndAdvance = useCallback(() => {

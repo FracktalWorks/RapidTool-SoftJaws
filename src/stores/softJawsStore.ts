@@ -20,17 +20,20 @@ import type {
 const INITIAL_STATE: SoftJawsState = {
   parts: [],
   activePart: null,
+  clampGap: 0.01,
   viseConfig: {
-    type: 'kurt-d60',
+    type: 'custom',
     jawCount: 2,
-    jawWidth: 152.4,  // 6"
-    jawHeight: 38.1,  // 1.5"
-    jawStroke: 152.4, // 6"
+    jawWidth: 150.0,
+    jawHeight: 65.0,
+    jawStroke: 180.0,
+    tSlotWidth: 14.0,
+    tSlotSpacing: 125.0,
   },
   jawBlank: {
-    width: 150,
-    height: 50,
-    depth: 40,
+    face: 150.0,       // Z, matches jawWidth
+    height: 65.0,      // Y, matches jawHeight
+    thickness: 30.0,   // X stick-out from carriage — typical soft-jaw stock
     material: 'aluminum-6061',
   },
   jawProfile: {
@@ -48,6 +51,7 @@ const INITIAL_STATE: SoftJawsState = {
     boltSize: 8,
     spacing: 50,
     count: 2,
+    generated: false,
   },
   exportConfig: {
     format: 'stl',
@@ -138,3 +142,5 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
     { name: 'softjaws' }
   )
 );
+
+

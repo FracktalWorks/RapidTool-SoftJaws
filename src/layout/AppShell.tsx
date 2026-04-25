@@ -31,7 +31,7 @@ import {
   UserCircle2,
 } from 'lucide-react';
 import { useWorkflow } from '@/hooks/useWorkflow';
-import { STEP_CONFIG } from '@/workflow';
+import { STEP_CONFIG, getStepGate } from '@/workflow';
 import type { SoftJawsWorkflowStep } from '@/workflow';
 import { ContextOptionsPanel } from '@/components/ContextOptionsPanel';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
@@ -135,12 +135,16 @@ function AppHeader() {
 
 function AppToolbar() {
   const { currentStep, steps, goToStep } = useWorkflow();
+  const partCount        = useSoftJawsStore((s) => s.parts.length);
+  const profileGenerated = useSoftJawsStore((s) => s.jawProfile.generated);
 
   const handleToolSelect = useCallback(
     (stepId: string) => {
+      const gate = getStepGate(stepId as SoftJawsWorkflowStep, { partCount, profileGenerated });
+      if (!gate.allowed) return;
       goToStep(stepId as SoftJawsWorkflowStep);
     },
-    [goToStep],
+    [goToStep, partCount, profileGenerated],
   );
 
   return (
@@ -153,16 +157,20 @@ function AppToolbar() {
         {steps.map((stepId) => {
           const meta = STEP_CONFIG[stepId];
           const Icon = STEP_ICONS[stepId];
+          const gate = getStepGate(stepId, { partCount, profileGenerated });
+          const tooltip = gate.allowed ? meta.description : `${meta.label} — ${gate.reason}`;
           return (
             <SidebarIcon
               key={stepId}
               icon={
                 <Icon
-                  className={`w-4 h-4 ${currentStep === stepId ? 'opacity-100' : 'opacity-60'}`}
+                  className={`w-4 h-4 ${
+                    !gate.allowed ? 'opacity-30' : currentStep === stepId ? 'opacity-100' : 'opacity-60'
+                  }`}
                 />
               }
               label={meta.label}
-              tooltip={meta.description}
+              tooltip={tooltip}
               active={currentStep === stepId}
               onClick={() => handleToolSelect(stepId)}
               size="md"
@@ -201,7 +209,7 @@ function AppFooter() {
 
 export function AppShell() {
   const [isContextPanelCollapsed, setIsContextPanelCollapsed] = useState(false);
-  const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
+  const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(true);
 
   return (
     <DashboardLayout

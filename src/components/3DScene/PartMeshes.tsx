@@ -1,27 +1,43 @@
 /**
- * PartMeshes — Renders all imported parts from the geometry cache
+ * PartMeshes — Renders all imported parts from the geometry cache.
  *
- * Reads part metadata from useSoftJawsStore (serializable) and
- * geometry data (Float32Arrays) from the module-level geometryCache.
- * Each PartMesh creates a BufferGeometry with position + normal attributes.
+ * Click a part → activate PivotControls gizmo (move + rotate).
+ *
+ * Position ownership strategy
+ * ────────────────────────────
+ * R3F's reconciler re-applies declarative `position`/`rotation` props on
+ * every re-render. SelectableTransformControls also sets these imperatively
+ * while the gizmo is active. If both run simultaneously the mesh flies off.
+ *
+ * Fix: no `position`/`rotation` props on <mesh>. Instead:
+ *   • useLayoutEffect sets them imperatively from the store — but only when
+ *     the gizmo is NOT active (gizmoActive === false).
+ *   • handleSelectionChange(true)  → gizmoActive = true  → effect is skipped
+ *   • handleTransformChange(data)  → bake to store, then gizmoActive = false
+ *     → next effect run picks up the new store values cleanly.
  */
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
+import { SelectableTransformControls } from '@rapidtool/cad-ui';
+import type { TransformData } from '@rapidtool/cad-ui';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { geometryCache } from '@/stores/geometryCache';
+import { jawBaseH } from '@/features/vise-config/data/presets';
 import type { ProcessedPart } from '@/stores/types';
 
-// Stable color palette for parts (cycles if more than palette length)
 const PART_COLORS = [
-  '#4ade80', // green
-  '#60a5fa', // blue
-  '#f472b6', // pink
-  '#fb923c', // orange
-  '#a78bfa', // violet
-  '#34d399', // emerald
-  '#fbbf24', // amber
+  '#4ade80',
+  '#60a5fa',
+  '#f472b6',
+  '#fb923c',
+  '#a78bfa',
+  '#34d399',
+  '#fbbf24',
 ];
+
+const RAD2DEG = 180 / Math.PI;
+const DEG2RAD = Math.PI / 180;
 
 // ─── PartMesh ────────────────────────────────────────────────────────────────
 
@@ -29,16 +45,24 @@ function PartMesh({
   part,
   color,
   isActive,
+  viseJawHeight,
+  onSelect,
 }: {
   part: ProcessedPart;
   color: string;
   isActive: boolean;
+  viseJawHeight: number;
+  onSelect: (id: string) => void;
 }) {
+  const meshRef = useRef<THREE.Mesh>(null);
   const geomData = geometryCache.get(part.id);
-  const meshRef  = useRef<THREE.Mesh>(null);
+  const updatePartTransform = useSoftJawsStore((s) => s.updatePartTransform);
 
-  // Build a centered BufferGeometry — STL files can have arbitrary origins,
-  // so we translate by -center so the mesh sits at the world origin.
+  // Track whether SelectableTransformControls currently owns the mesh transform.
+  // While true, useLayoutEffect must NOT re-apply store values.
+  const [gizmoActive, setGizmoActive] = useState(false);
+
+  // Build a centered BufferGeometry — STL files can have arbitrary origins
   const geometry = useMemo(() => {
     if (!geomData) return null;
 
@@ -47,7 +71,6 @@ function PartMesh({
     const cy = (min[1] + max[1]) / 2;
     const cz = (min[2] + max[2]) / 2;
 
-    // Clone positions and shift so the bounding-box center lands at origin
     const shifted = new Float32Array(geomData.positions.length);
     for (let i = 0; i < geomData.positions.length; i += 3) {
       shifted[i]     = geomData.positions[i]     - cx;
@@ -61,40 +84,104 @@ function PartMesh({
     return geo;
   }, [geomData, part.boundingBox]);
 
+  const { position: pos, rotation: rot } = part.transform;
+  const partHeight = part.boundingBox.max[1] - part.boundingBox.min[1];
+  // Y where part bottom touches the jaw rail surface
+  const baseY = jawBaseH(viseJawHeight) + partHeight / 2;
+
+  // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
+  useLayoutEffect(() => {
+    if (!meshRef.current || gizmoActive) return;
+    meshRef.current.position.set(pos.x, baseY + pos.y, pos.z);
+    meshRef.current.rotation.set(
+      rot.x * DEG2RAD,
+      rot.y * DEG2RAD,
+      rot.z * DEG2RAD,
+    );
+  }, [pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, baseY, gizmoActive]);
+
+  // ── Click: select part + show gizmo ──────────────────────────────────────
+  const handleClick = useCallback(
+    (e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      onSelect(part.id);
+      window.dispatchEvent(
+        new CustomEvent('mesh-double-click', { detail: { partId: part.id } }),
+      );
+    },
+    [part.id, onSelect],
+  );
+
+  // ── Gizmo activated → stop R3F from fighting it ────────────────────────
+  const handleSelectionChange = useCallback((active: boolean) => {
+    if (active) setGizmoActive(true);
+    // Deactivation is handled in handleTransformChange after store is committed
+  }, []);
+
+  // ── Gizmo drag-end / close → bake world-space back into store ─────────
+  const handleTransformChange = useCallback(
+    ({ position: worldPos, rotation: worldRot }: TransformData) => {
+      // Commit to store first, then release gizmo ownership.
+      // This ensures useLayoutEffect picks up correct values on the next render.
+      updatePartTransform(part.id, {
+        position: {
+          x: worldPos.x,
+          y: worldPos.y - baseY, // strip rail offset — store holds delta only
+          z: worldPos.z,
+        },
+        rotation: {
+          x: worldRot.x * RAD2DEG,
+          y: worldRot.y * RAD2DEG,
+          z: worldRot.z * RAD2DEG,
+        },
+      });
+      setGizmoActive(false);
+    },
+    [part.id, updatePartTransform, baseY],
+  );
+
   if (!geometry) return null;
 
-  const { position: pos, rotation: rot } = part.transform;
-  // Base Y lifts the part to sit on the ground plane; user offset adds on top
-  const baseY  = (part.boundingBox.max[1] - part.boundingBox.min[1]) / 2;
-  // Rotation stored in degrees → convert to radians for Three.js
-  const deg2rad = Math.PI / 180;
-
   return (
-    <mesh
-      ref={meshRef}
-      geometry={geometry}
-      position={[pos.x, baseY + pos.y, pos.z]}
-      rotation={[rot.x * deg2rad, rot.y * deg2rad, rot.z * deg2rad]}
-      castShadow
-      receiveShadow
+    <SelectableTransformControls
+      meshRef={meshRef}
+      enabled={isActive}
+      partId={part.id}
+      onSelectionChange={handleSelectionChange}
+      onTransformChange={handleTransformChange}
     >
-      <meshStandardMaterial
-        color={color}
-        roughness={0.35}
-        metalness={0.15}
-        side={THREE.DoubleSide}
-        emissive={isActive ? color : '#000000'}
-        emissiveIntensity={isActive ? 0.1 : 0}
-      />
-    </mesh>
+      {/*
+       * No position/rotation props here — set imperatively via useLayoutEffect.
+       * Passing declarative props would fight SelectableTransformControls when
+       * a Zustand update triggers a re-render mid-drag.
+       */}
+      <mesh
+        ref={meshRef}
+        geometry={geometry}
+        onClick={handleClick}
+        castShadow
+        receiveShadow
+      >
+        <meshStandardMaterial
+          color={color}
+          roughness={0.35}
+          metalness={0.15}
+          side={THREE.DoubleSide}
+          emissive={isActive ? color : '#000000'}
+          emissiveIntensity={isActive ? 0.1 : 0}
+        />
+      </mesh>
+    </SelectableTransformControls>
   );
 }
 
 // ─── PartMeshes ──────────────────────────────────────────────────────────────
 
 export function PartMeshes() {
-  const parts    = useSoftJawsStore((s) => s.parts);
-  const activePart = useSoftJawsStore((s) => s.activePart);
+  const parts         = useSoftJawsStore((s) => s.parts);
+  const activePart    = useSoftJawsStore((s) => s.activePart);
+  const setActivePart = useSoftJawsStore((s) => s.setActivePart);
+  const viseJawHeight = useSoftJawsStore((s) => s.viseConfig.jawHeight);
 
   if (parts.length === 0) return null;
 
@@ -106,6 +193,8 @@ export function PartMeshes() {
           part={part}
           color={PART_COLORS[idx % PART_COLORS.length]}
           isActive={activePart === part.id}
+          viseJawHeight={viseJawHeight}
+          onSelect={setActivePart}
         />
       ))}
     </>

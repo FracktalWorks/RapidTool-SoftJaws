@@ -310,6 +310,9 @@ const baseStyles: Record<string, React.CSSProperties> = {
   panelContent: {
     flex: 1,
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
   },
   content: {
     flex: 1,

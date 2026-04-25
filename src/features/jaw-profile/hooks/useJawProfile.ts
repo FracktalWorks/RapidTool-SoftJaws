@@ -1,21 +1,31 @@
 /**
- * useJawProfile — CSG pipeline hook for generating the jaw profile cavity.
+ * useJawProfile — CSG pipeline hook for generating jaw profile cavities.
  *
- * Subtracts the active workpiece from the jaw blank box using CSGEngine
- * from @rapidtool/cad-core. The operation runs inside a deferred Promise
- * (via setTimeout 0) so the React event loop is not blocked during computation.
+ * The end product is TWO soft-jaw blanks (left and right) with workpiece-
+ * shaped pockets cut into their inner X-faces. This hook:
+ *   1. Builds a positioned blank mesh on each side (±jawXOffset)
+ *   2. Bakes each blank's world transform into its geometry
+ *   3. Fires one CSG worker per side with the correct sweep direction
+ *   4. Caches the results under JAW_PROFILE_CACHE_KEY_{LEFT,RIGHT}
  *
- * Result is stored in geometryCache under JAW_PROFILE_CACHE_KEY and the
- * store's jawProfile.generated flag is set to true on success.
+ * Removal directions:
+ *   - Left  blank  → sweep toward -X  (removalDir = [-1, 0, 0])
+ *   - Right blank  → sweep toward +X  (removalDir = [+1, 0, 0])
  */
 
 import { useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { CSGEngine } from '@rapidtool/cad-core';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
-import { geometryCache, JAW_PROFILE_CACHE_KEY } from '@/stores/geometryCache';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import {
+  geometryCache,
+  JAW_PROFILE_CACHE_KEY_LEFT,
+  JAW_PROFILE_CACHE_KEY_RIGHT,
+} from '@/stores/geometryCache';
+import {
+  jawBaseH,
+  bracketInnerX,
+  pillarFaceWidth,
+} from '@/features/vise-config/data/presets';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -25,98 +35,48 @@ export interface UseJawProfileReturn {
   generate: () => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helper: build a positioned blank mesh ────────────────────────────────────
 
 /**
- * Builds a THREE.Mesh for the jaw blank box.
- * Positioned so it sits on the Y = 0 ground plane, centered in X/Z.
+ * Blank axis mapping matches JawBlankMesh.tsx:
+ *   X thickness = jawBlank.thickness  (stick-out from carriage)
+ *   Y height    = jawBlank.height
+ *   Z face      = jawBlank.face       (along the jaw face)
  */
 function buildBlankMesh(
-  width: number,
-  height: number,
-  depth: number,
+  thickness: number,
+  height:    number,
+  face:      number,
+  xCenter:   number,
+  yCenter:   number,
 ): THREE.Mesh {
-  const geo = new THREE.BoxGeometry(width, height, depth);
+  const geo  = new THREE.BoxGeometry(thickness, height, face);
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
-  mesh.position.set(0, height / 2, 0);
+  mesh.position.set(xCenter, yCenter, 0);
   mesh.updateMatrixWorld(true);
   return mesh;
 }
 
-/**
- * Reconstructs a THREE.Mesh from a CachedGeometry, centered at the world
- * origin and raised to sit on the Y = 0 plane, then applies the user transform.
- */
-function buildPartMesh(
-  cachedGeo: import('@/stores/geometryCache').CachedGeometry,
-  boundingBox: { min: [number, number, number]; max: [number, number, number] },
-  transform: import('@/stores/types').PartTransform
-): THREE.Mesh {
-  const { min, max } = boundingBox;
-  const cx = (min[0] + max[0]) / 2;
-  const cy = (min[1] + max[1]) / 2;
-  const cz = (min[2] + max[2]) / 2;
-  const partHeight = max[1] - min[1];
+// ─── Helper: fire a single worker and resolve when it posts back ─────────────
 
-  // Center the positions (mirrors the centering done in PartMesh renderer)
-  const shifted = new Float32Array(cachedGeo.positions.length);
-  for (let i = 0; i < cachedGeo.positions.length; i += 3) {
-    shifted[i]     = cachedGeo.positions[i]     - cx;
-    shifted[i + 1] = cachedGeo.positions[i + 1] - cy;
-    shifted[i + 2] = cachedGeo.positions[i + 2] - cz;
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(shifted, 3));
-  geo.setAttribute('normal',   new THREE.BufferAttribute(cachedGeo.normals.slice(), 3));
-
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
-  
-  // Base Y lifts the part to sit on the ground plane; user offset adds on top
-  const baseY = partHeight / 2;
-  const deg2rad = Math.PI / 180;
-  
-  mesh.position.set(
-    transform.position.x, 
-    baseY + transform.position.y, 
-    transform.position.z
-  );
-  
-  mesh.rotation.set(
-    transform.rotation.x * deg2rad, 
-    transform.rotation.y * deg2rad, 
-    transform.rotation.z * deg2rad
-  );
-  
-  mesh.updateMatrixWorld(true);
-  return mesh;
-}
-
-/**
- * Extracts Float32Array position + normal data from a THREE.BufferGeometry.
- * Returns null if attributes are missing (malformed CSG result).
- */
-function extractCachedGeometry(
-  geometry: THREE.BufferGeometry,
-): import('@/stores/geometryCache').CachedGeometry | null {
-  const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-  const nrmAttr = geometry.getAttribute('normal')   as THREE.BufferAttribute | undefined;
-
-  if (!posAttr || !nrmAttr) return null;
-
-  // Ensure we have plain Float32Arrays (BufferAttribute.array may be a view)
-  const positions = posAttr.array instanceof Float32Array
-    ? posAttr.array.slice()
-    : new Float32Array(posAttr.array);
-
-  let normals: Float32Array;
-  if (nrmAttr.array instanceof Float32Array) {
-    normals = nrmAttr.array.slice();
-  } else {
-    normals = new Float32Array(nrmAttr.array);
-  }
-
-  return { positions, normals, faceCount: positions.length / 9 };
+function runCsgWorker(
+  payload: import('../worker/profileWorker').ProfileWorkerInput,
+): Promise<import('../worker/profileWorker').ProfileWorkerOutput> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../worker/profileWorker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    worker.onmessage = (e: MessageEvent<import('../worker/profileWorker').ProfileWorkerOutput>) => {
+      resolve(e.data);
+      worker.terminate();
+    };
+    worker.onerror = (err) => {
+      reject(new Error('Worker execution error: ' + err.message));
+      worker.terminate();
+    };
+    worker.postMessage(payload);
+  });
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -125,11 +85,10 @@ export function useJawProfile(): UseJawProfileReturn {
   const [status, setStatus] = useState<JawProfileStatus>('idle');
   const [error, setError]   = useState<string | null>(null);
 
-  const { parts, jawBlank, jawProfile, activePart, updateJawProfile } =
+  const { parts, jawBlank, jawProfile, viseConfig, activePart, clampGap, updateJawProfile } =
     useSoftJawsStore();
 
-  const generate = useCallback(() => {
-    // Validate preconditions
+  const generate = useCallback(async () => {
     const partId = activePart ?? parts[0]?.id ?? null;
     if (!partId) {
       setError('Import a part before generating the jaw profile.');
@@ -148,55 +107,94 @@ export function useJawProfile(): UseJawProfileReturn {
     setStatus('running');
     setError(null);
 
-    // Run CSG in background worker
-    const worker = new Worker(new URL('../worker/profileWorker.ts', import.meta.url), { type: 'module' });
+    // ── Geometry layout ─────────────────────────────────────────────────────
+    // Soft jaws are bolted to the L-bracket pillars (fixed end-stops), so
+    // the jaw outer face abuts the pillar inner face — independent of part
+    // width. Face is capped to the pillar Z width so the jaw never
+    // overhangs the platform (mirrors JawBlankMesh render).
+    const baseH      = jawBaseH(viseConfig.jawHeight);
+    const innerX     = bracketInnerX(viseConfig);
+    const fixedXOff  = innerX - jawBlank.thickness / 2;
+    const bbox       = part.boundingBox;
+    const rightXOff  = Math.min(
+      fixedXOff,
+      (bbox.max[0] - bbox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
+    );
+    const blankY     = baseH + jawBlank.height / 2;
+    const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
 
-    worker.onmessage = (e: MessageEvent<import('../worker/profileWorker').ProfileWorkerOutput>) => {
-      const data = e.data;
-      if (data.success && data.positions && data.normals) {
-        // Cache the processed geometry
-        geometryCache.set(JAW_PROFILE_CACHE_KEY, {
-          positions: data.positions,
-          normals: data.normals,
-          faceCount: data.positions.length / 9, // roughly, if non-indexed
-        });
-
-        updateJawProfile({ generated: true });
-        setStatus('success');
-      } else {
-        setError(data.error || 'CSG Worker failed');
-        setStatus('error');
-      }
-      worker.terminate();
+    // ── Build left & right blanks, bake world transform into geometry ───────
+    const buildBakedGeo = (xCenter: number) => {
+      const mesh = buildBlankMesh(
+        jawBlank.thickness,
+        jawBlank.height,
+        renderFace,
+        xCenter,
+        blankY,
+      );
+      const geo = mesh.geometry.clone();
+      geo.applyMatrix4(mesh.matrixWorld);
+      return geo;
     };
 
-    worker.onerror = (err) => {
-      setError('Worker execution error: ' + err.message);
-      setStatus('error');
-      worker.terminate();
-    };
+    const leftGeo  = buildBakedGeo(-fixedXOff);
+    const rightGeo = buildBakedGeo(+rightXOff);
 
-    // Extract blank geometry data
-    const blankMesh = buildBlankMesh(jawBlank.width, jawBlank.height, jawBlank.depth);
-    const blankGeo = blankMesh.geometry;
-    
-    // Convert part cache arrays (ensure they are copied/transferred right)
-    const payload: import('../worker/profileWorker').ProfileWorkerInput = {
-      id: partId,
-      blankPositions: blankGeo.getAttribute('position').array as Float32Array,
-      blankNormals: blankGeo.getAttribute('normal').array as Float32Array,
-      blankIndices: blankGeo.index?.array as Uint32Array | undefined,
-      partPositions: cachedGeo.positions,
-      partNormals: cachedGeo.normals,
-      partTransform: part.transform,
+    const makePayload = (
+      geo: THREE.BufferGeometry,
+      removalDir: [number, number, number],
+    ): import('../worker/profileWorker').ProfileWorkerInput => ({
+      id:             partId,
+      blankPositions: geo.getAttribute('position').array as Float32Array,
+      blankNormals:   geo.getAttribute('normal').array   as Float32Array,
+      blankIndices:   geo.index?.array as Uint32Array | undefined,
+      partPositions:  cachedGeo.positions,
+      partNormals:    cachedGeo.normals,
+      partTransform:  part.transform,
       partBoundingBox: part.boundingBox,
-      removalDir: [0, -1, 0],
-      depth: jawProfile.depth,
-      offset: jawProfile.clearance
-    };
+      removalDir,
+      depth:  jawProfile.depth,
+      offset: jawProfile.clearance,
+    });
 
-    worker.postMessage(payload);
-  }, [parts, activePart, jawBlank, jawProfile, updateJawProfile]);
+    try {
+      // Run both sides in parallel — each worker is independent.
+      const [leftRes, rightRes] = await Promise.all([
+        runCsgWorker(makePayload(leftGeo,  [-1, 0, 0])),
+        runCsgWorker(makePayload(rightGeo, [+1, 0, 0])),
+      ]);
+
+      if (!leftRes.success || !leftRes.positions || !leftRes.normals) {
+        throw new Error(leftRes.error || 'Left CSG failed');
+      }
+      if (!rightRes.success || !rightRes.positions || !rightRes.normals) {
+        throw new Error(rightRes.error || 'Right CSG failed');
+      }
+
+      geometryCache.set(JAW_PROFILE_CACHE_KEY_LEFT, {
+        positions: leftRes.positions,
+        normals:   leftRes.normals,
+        indices:   leftRes.indices,
+        faceCount: leftRes.indices
+          ? leftRes.indices.length / 3
+          : leftRes.positions.length / 9,
+      });
+      geometryCache.set(JAW_PROFILE_CACHE_KEY_RIGHT, {
+        positions: rightRes.positions,
+        normals:   rightRes.normals,
+        indices:   rightRes.indices,
+        faceCount: rightRes.indices
+          ? rightRes.indices.length / 3
+          : rightRes.positions.length / 9,
+      });
+
+      updateJawProfile({ generated: true });
+      setStatus('success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  }, [parts, activePart, jawBlank, jawProfile, viseConfig, updateJawProfile]);
 
   return { status, error, generate };
 }

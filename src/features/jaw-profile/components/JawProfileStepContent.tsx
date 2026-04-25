@@ -1,13 +1,18 @@
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useJawProfile } from '../hooks/useJawProfile';
+import { getStepGate } from '@/workflow';
 
 export function JawProfileStepContent() {
-  const { jawProfile, parts, updateJawProfile } = useSoftJawsStore();
+  const jawProfile        = useSoftJawsStore((s) => s.jawProfile);
+  const partCount         = useSoftJawsStore((s) => s.parts.length);
+  const profileGenerated  = useSoftJawsStore((s) => s.jawProfile.generated);
+  const updateJawProfile  = useSoftJawsStore((s) => s.updateJawProfile);
   const { status, error, generate } = useJawProfile();
 
-  const canGenerate = parts.length > 0 && status !== 'running';
+  const gate        = getStepGate('jaw-profile', { partCount, profileGenerated });
   const isRunning   = status === 'running';
+  const canGenerate = gate.allowed && !isRunning;
 
   return (
     <div className="flex flex-col gap-4 p-3">
@@ -86,8 +91,8 @@ export function JawProfileStepContent() {
         )}
       </button>
 
-      {!parts.length && (
-        <p className="text-xs text-muted-foreground">Import a part in the previous step first.</p>
+      {!gate.allowed && gate.reason && (
+        <p className="text-xs text-muted-foreground">{gate.reason}</p>
       )}
     </div>
   );

@@ -26,33 +26,36 @@ export interface ProcessedPart {
   transform: PartTransform;
 }
 
-/** Known vise form-factors with standard jaw width/stroke specs */
-export type ViseType =
-  | 'kurt-d60'
-  | 'kurt-d688'
-  | 'schunk-ksr-125'
-  | 'schunk-ksr-160'
-  | 'glacern-gmc-606'
-  | 'three-jaw-chuck'
-  | 'four-jaw-chuck'
-  | 'six-jaw-chuck'
-  | 'custom';
+/**
+ * Single canonical vise type. Multi-preset catalog was removed in favour of
+ * one fully-customizable vise — all dimensions editable in the vise-config
+ * step. The `type` field is retained for forward compatibility if presets
+ * ever return.
+ */
+export type ViseType = 'custom';
 
 export interface ViseConfig {
   type: ViseType;
-  jawCount: number;   // 2 for vises, 3/4/6 for chucks
-  jawWidth: number;   // mm — jaw face width
-  jawHeight: number;  // mm — jaw face height
-  jawStroke: number;  // mm — max opening
-  tSlotWidth?: number;    // mm - for mounting holes
-  tSlotSpacing?: number;  // mm
-  customName?: string; // label when type === 'custom'
+  jawCount: number;      // always 2 for milling vises
+  jawWidth: number;      // mm — jaw face width (Z extent)
+  jawHeight: number;     // mm — jaw face height (Y extent)
+  jawStroke: number;     // mm — max opening
+  tSlotWidth?: number;   // mm — T-slot width for mounting bolts
+  tSlotSpacing?: number; // mm — bolt hole centre spacing
+  customName?: string;
 }
 
+/**
+ * Soft-jaw blank stock. Axis-named fields prevent the field-vs-axis
+ * confusion that previously hit JawBlankStepContent.
+ */
 export interface JawBlankConfig {
-  width: number;
+  /** Z extent — along the jaw face, typically matches viseConfig.jawWidth */
+  face: number;
+  /** Y extent — vertical height of the blank */
   height: number;
-  depth: number;
+  /** X extent — thickness sticking out from the carriage toward the workpiece */
+  thickness: number;
   material: string;
 }
 
@@ -73,6 +76,8 @@ export interface MountingHolesConfig {
   boltSize: number;
   spacing: number;
   count: number;
+  /** True once the hole CSG has populated JAW_HOLED_CACHE_KEY_{LEFT,RIGHT}. */
+  generated: boolean;
 }
 
 export interface ExportConfig {
@@ -83,6 +88,7 @@ export interface ExportConfig {
 export interface SoftJawsState {
   parts: ProcessedPart[];
   activePart: string | null;
+  clampGap: number;        // mm clearance between right jaw and part on import
   viseConfig: ViseConfig;
   jawBlank: JawBlankConfig;
   jawProfile: JawProfileConfig;

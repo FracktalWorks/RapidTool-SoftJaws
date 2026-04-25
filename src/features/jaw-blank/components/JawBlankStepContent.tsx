@@ -1,11 +1,12 @@
-import React from 'react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { MATERIALS } from '../types';
 
-const DIMS: { field: 'width' | 'height' | 'depth'; label: string }[] = [
-  { field: 'width',  label: 'Width (X)' },
-  { field: 'height', label: 'Height (Z)' },
-  { field: 'depth',  label: 'Depth (Y)' },
+type DimField = 'face' | 'height' | 'thickness';
+
+const DIMS: { field: DimField; label: string; hint: string }[] = [
+  { field: 'face',      label: 'Face (Z)',      hint: 'along jaw face'        },
+  { field: 'height',    label: 'Height (Y)',    hint: 'vertical'              },
+  { field: 'thickness', label: 'Thickness (X)', hint: 'stick-out from carriage' },
 ];
 
 export function JawBlankStepContent() {
@@ -18,9 +19,12 @@ export function JawBlankStepContent() {
       </p>
 
       <div className="flex flex-col gap-2">
-        {DIMS.map(({ field, label }) => (
+        {DIMS.map(({ field, label, hint }) => (
           <label key={field} className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">{label}</span>
+            <span className="text-muted-foreground">
+              {label}
+              <span className="ml-1 text-[10px] opacity-60">{hint}</span>
+            </span>
             <div className="flex items-center gap-1">
               <input
                 type="number"

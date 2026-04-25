@@ -3,3 +3,6 @@ export type { SoftJawsWorkflowStep } from './steps';
 
 export { STEP_CONFIG } from './stepConfig';
 export type { StepMeta } from './stepConfig';
+
+export { getStepGate } from './gates';
+export type { StepGate, StepGateInputs } from './gates';

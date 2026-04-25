@@ -78,9 +78,9 @@ export function useExport(): UseExportReturn {
           : null;
 
         const exportMesh = mesh ?? buildBlankMesh(
-          jawBlank.width,
-          jawBlank.height,
-          jawBlank.depth,
+          jawBlank.face,       // Z face
+          jawBlank.height,     // Y
+          jawBlank.thickness,  // X thickness
         );
 
         const stlData = meshToSTL(exportMesh, { binary: true });

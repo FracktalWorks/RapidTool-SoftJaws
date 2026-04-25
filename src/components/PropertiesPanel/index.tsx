@@ -267,10 +267,10 @@ export function PropertiesPanel() {
         </AccordionTrigger>
         <AccordionContent className="px-4">
           <div className="space-y-2 py-1">
-            <PropRow label="Material" value={jawBlank.material} />
-            <PropRow label="Width"    value={`${jawBlank.width} mm`} />
-            <PropRow label="Height"   value={`${jawBlank.height} mm`} />
-            <PropRow label="Depth"    value={`${jawBlank.depth} mm`} />
+            <PropRow label="Material"  value={jawBlank.material} />
+            <PropRow label="Face (Z)"  value={`${jawBlank.face} mm`} />
+            <PropRow label="Height (Y)" value={`${jawBlank.height} mm`} />
+            <PropRow label="Thickness (X)" value={`${jawBlank.thickness} mm`} />
           </div>
         </AccordionContent>
       </AccordionItem>

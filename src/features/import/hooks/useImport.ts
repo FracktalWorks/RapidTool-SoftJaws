@@ -27,7 +27,6 @@ export function useImport() {
     try {
       const result = await parseSTL(file);
       geometryCache.set(result.meta.id, result.geometry);
-      // Inject a zero transform — user adjusts via PropertiesPanel
       addPart({
         ...result.meta,
         transform: {
