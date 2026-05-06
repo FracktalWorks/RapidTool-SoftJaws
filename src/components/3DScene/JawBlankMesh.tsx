@@ -21,16 +21,159 @@
  * was hidden inside the gap between jaws and only visible looking down it).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { Edges, Text } from '@react-three/drei';
+import { Edges, Text, Cone, Cylinder } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
+import { useWorkflowStore } from '@rapidtool/cad-ui';
 import {
   jawBaseH,
   bracketInnerX,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
+
+// ─── Interactive Drag Handle ─────────────────────────────────────────────────
+// A 3D arrow (cylinder + cone) that the user can drag along a single axis.
+// Uses native R3F pointer events + setPointerCapture for reliable tracking.
+
+type Axis = 'x' | 'y' | 'z';
+
+interface DragHandleProps {
+  /** World position of the handle base */
+  position: [number, number, number];
+  /** Which world axis dragging moves along */
+  axis: Axis;
+  /** Direction multiplier — +1 or -1 (e.g. right jaw thickness grows toward -X) */
+  direction: number;
+  /** Current dimension value (mm) */
+  value: number;
+  /** Min / max clamp for the dimension */
+  range: [number, number];
+  /** Called with the new dimension value while dragging */
+  onChange: (newValue: number) => void;
+  /** Handle color (idle) */
+  color?: string;
+  /** Handle length scale */
+  length?: number;
+}
+
+const HANDLE_HOVER_COLOR = '#ffdd44';
+
+function DragHandle({
+  position,
+  axis,
+  direction,
+  value,
+  range,
+  onChange,
+  color = '#00bbff',
+  length = 8,
+}: DragHandleProps) {
+  const { camera, gl } = useThree();
+  const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dragStartRef = useRef<{ pointerWorld: number; startValue: number } | null>(null);
+
+  // Build axis vector
+  const axisVec = useMemo(() => {
+    const v = new THREE.Vector3();
+    v[axis] = direction;
+    return v;
+  }, [axis, direction]);
+
+  // Rotation to point the arrow along the drag axis
+  const rotation = useMemo((): [number, number, number] => {
+    if (axis === 'y') return direction > 0 ? [0, 0, 0] : [Math.PI, 0, 0];
+    if (axis === 'x') return direction > 0 ? [0, 0, -Math.PI / 2] : [0, 0, Math.PI / 2];
+    return direction > 0 ? [Math.PI / 2, 0, 0] : [-Math.PI / 2, 0, 0];
+  }, [axis, direction]);
+
+  // Project pointer position onto the drag axis in world space
+  const projectPointerOnAxis = useCallback((e: { clientX: number; clientY: number }) => {
+    const rect = gl.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+
+    // Project ray onto a plane containing the handle and perpendicular to the
+    // camera's view direction (gives most stable tracking for ortho cameras).
+    const handlePos = new THREE.Vector3(...position);
+    const planeNormal = camera.getWorldDirection(new THREE.Vector3()).clone();
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, handlePos);
+    const intersection = new THREE.Vector3();
+    ray.ray.intersectPlane(plane, intersection);
+    if (!intersection) return 0;
+    return intersection.dot(axisVec);
+  }, [camera, gl, position, axisVec]);
+
+  const handlePointerDown = useCallback((e: any) => {
+    e.stopPropagation();
+    (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+    const worldCoord = projectPointerOnAxis(e);
+    dragStartRef.current = { pointerWorld: worldCoord, startValue: value };
+    setDragging(true);
+  }, [projectPointerOnAxis, value]);
+
+  const handlePointerMove = useCallback((e: any) => {
+    if (!dragging || !dragStartRef.current) return;
+    e.stopPropagation();
+    const worldCoord = projectPointerOnAxis(e);
+    const delta = (worldCoord - dragStartRef.current.pointerWorld) * direction;
+    const newVal = Math.max(range[0], Math.min(range[1], dragStartRef.current.startValue + delta));
+    onChange(Math.round(newVal * 10) / 10); // snap to 0.1mm
+  }, [dragging, projectPointerOnAxis, direction, range, onChange]);
+
+  const handlePointerUp = useCallback((e: any) => {
+    (e.target as HTMLElement)?.releasePointerCapture?.(e.pointerId);
+    dragStartRef.current = null;
+    setDragging(false);
+  }, []);
+
+  const activeColor = dragging ? '#ffffff' : hovered ? HANDLE_HOVER_COLOR : color;
+
+  return (
+    <group
+      position={position}
+      rotation={rotation}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); gl.domElement.style.cursor = 'grab'; }}
+      onPointerOut={() => { setHovered(false); if (!dragging) gl.domElement.style.cursor = 'auto'; }}
+    >
+      {/* Shaft */}
+      <Cylinder args={[0.8, 0.8, length, 8]} position={[0, length / 2, 0]}>
+        <meshStandardMaterial
+          color={activeColor}
+          emissive={activeColor}
+          emissiveIntensity={hovered || dragging ? 0.6 : 0.2}
+          roughness={0.3}
+          metalness={0.5}
+          transparent
+          opacity={0.85}
+        />
+      </Cylinder>
+      {/* Arrowhead */}
+      <Cone args={[2.2, 4, 12]} position={[0, length + 2, 0]}>
+        <meshStandardMaterial
+          color={activeColor}
+          emissive={activeColor}
+          emissiveIntensity={hovered || dragging ? 0.8 : 0.3}
+          roughness={0.2}
+          metalness={0.6}
+          transparent
+          opacity={0.9}
+        />
+      </Cone>
+    </group>
+  );
+}
 
 // Dark soft-jaw palette — reads as forged steel against the light vise body.
 const MATERIAL_COLORS: Record<string, string> = {
@@ -93,32 +236,6 @@ function SideBolt({
   );
 }
 
-// ─── Outer-face clearance bore ───────────────────────────────────────────────
-// Bolt shank exits the outer (pillar-abutting) face of the jaw before threading
-// into the L-pillar. Two layers: bright chamfer ring + dark bore passage.
-
-function OuterBore({
-  x, y, z, r, sign,
-}: { x: number; y: number; z: number; r: number; sign: 1 | -1 }) {
-  const ringR = r * 1.20;  // chamfer ring at the hole exit
-  const boreR = r * 0.82;  // clearance bore — slightly larger than bolt shank
-  const eps   = 0.05;
-  const yRot  = sign * Math.PI / 2;  // outer face normal: +X for right, -X for left
-
-  return (
-    <group position={[x + sign * eps, y, z]}>
-      <mesh rotation={[0, yRot, 0]}>
-        <circleGeometry args={[ringR, 40]} />
-        <meshStandardMaterial color="#8a9298" roughness={0.28} metalness={0.90} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh rotation={[0, yRot, 0]} position={[sign * 0.01, 0, 0]}>
-        <circleGeometry args={[boreR, 40]} />
-        <meshStandardMaterial color="#06080c" roughness={0.88} metalness={0.12} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
-
 // ─── JawBlankMesh ────────────────────────────────────────────────────────────
 
 const JAWS = [
@@ -128,7 +245,8 @@ const JAWS = [
 
 export function JawBlankMesh() {
   const jawBlank         = useSoftJawsStore((s) => s.jawBlank);
-  const viseConfig       = useSoftJawsStore((s) => s.viseConfig);
+  const updateJawBlank   = useSoftJawsStore((s) => s.updateJawBlank);
+  const viseConfig       = useViseStore((s) => s.viseConfig);
   const mountingHoles    = useSoftJawsStore((s) => s.mountingHoles);
   const clampGap         = useSoftJawsStore((s) => s.clampGap);
   const activePartBbox   = useSoftJawsStore((s) => {
@@ -136,6 +254,18 @@ export function JawBlankMesh() {
     return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
   });
   const { face, height, thickness, material } = jawBlank;
+
+  // Only show interactive handles during the jaw-blank workflow step
+  const activeStep = useWorkflowStore((s) => s.activeStep);
+  const showHandles = activeStep === 'jaw-blank';
+
+  const handleHeightChange = useCallback((val: number) => {
+    updateJawBlank({ height: val });
+  }, [updateJawBlank]);
+
+  const handleThicknessChange = useCallback((val: number) => {
+    updateJawBlank({ thickness: val });
+  }, [updateJawBlank]);
 
   const { centerY, leftXOff, rightXOff, boltDia, boltZs, holesY, renderFace, labelSize } = useMemo(() => {
     const baseY   = jawBaseH(viseConfig.jawHeight);
@@ -159,7 +289,7 @@ export function JawBlankMesh() {
 
     return {
       centerY:    baseY + height / 2,
-      leftXOff:   fixedXOff,
+      leftXOff:   rXOff,
       rightXOff:  rXOff,
       boltDia:    dia,
       boltZs:     zs,
@@ -205,19 +335,6 @@ export function JawBlankMesh() {
               />
             ))}
 
-            {/* Clearance bore exit on OUTER face — bolt shank emerges here
-                before threading into the L-pillar. */}
-            {boltZs.map((bz) => (
-              <OuterBore
-                key={`ob_${bz}`}
-                x={x + sign * (thickness / 2)}
-                y={holesY}
-                z={bz}
-                r={boltDia * 0.50}
-                sign={sign}
-              />
-            ))}
-
             {/* Small laser-etched ID label — top-outer corner of each ±Z face */}
             {[1, -1].map((zSide) => (
               <Text
@@ -239,6 +356,35 @@ export function JawBlankMesh() {
                 {label}
               </Text>
             ))}
+
+            {/* ── Interactive Resize Handles (jaw-blank step only) ────────── */}
+            {showHandles && (
+              <>
+                {/* Height handle — sits on top of the jaw, drags upward */}
+                <DragHandle
+                  position={[x, centerY + height / 2, 0]}
+                  axis="y"
+                  direction={1}
+                  value={height}
+                  range={[15, 200]}
+                  onChange={handleHeightChange}
+                  color="#40ff60"
+                  length={6}
+                />
+
+                {/* Thickness handle — sits on inner face, drags inward (toward workpiece) */}
+                <DragHandle
+                  position={[innerX, centerY, 0]}
+                  axis="x"
+                  direction={-sign}
+                  value={thickness}
+                  range={[8, 80]}
+                  onChange={handleThicknessChange}
+                  color="#ff4060"
+                  length={6}
+                />
+              </>
+            )}
           </group>
         );
       })}

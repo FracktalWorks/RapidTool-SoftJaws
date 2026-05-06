@@ -100,6 +100,7 @@ function parseBinarySTL(buffer: ArrayBuffer, fileName: string, fileSize: number)
         min: [minX, minY, minZ],
         max: [maxX, maxY, maxZ],
       },
+      transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
     },
     geometry: { positions, normals, faceCount },
   };
@@ -158,6 +159,7 @@ function parseASCIISTL(text: string, fileName: string, fileSize: number): ParseR
         min: [minX, minY, minZ],
         max: [maxX, maxY, maxZ],
       },
+      transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 } },
     },
     geometry: {
       positions: new Float32Array(posArr),

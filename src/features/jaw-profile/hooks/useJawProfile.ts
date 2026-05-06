@@ -16,6 +16,7 @@
 import { useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import {
   geometryCache,
   JAW_PROFILE_CACHE_KEY_LEFT,
@@ -85,8 +86,9 @@ export function useJawProfile(): UseJawProfileReturn {
   const [status, setStatus] = useState<JawProfileStatus>('idle');
   const [error, setError]   = useState<string | null>(null);
 
-  const { parts, jawBlank, jawProfile, viseConfig, activePart, clampGap, updateJawProfile } =
+  const { parts, jawBlank, jawProfile, activePart, clampGap, updateJawProfile } =
     useSoftJawsStore();
+  const viseConfig = useViseStore((s) => s.viseConfig);
 
   const generate = useCallback(async () => {
     const partId = activePart ?? parts[0]?.id ?? null;
@@ -114,9 +116,9 @@ export function useJawProfile(): UseJawProfileReturn {
     // overhangs the platform (mirrors JawBlankMesh render).
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
-    const fixedXOff  = innerX - jawBlank.thickness / 2;
-    const bbox       = part.boundingBox;
-    const rightXOff  = Math.min(
+    const fixedXOff    = innerX - jawBlank.thickness / 2;
+    const bbox         = part.boundingBox;
+    const adaptiveXOff = Math.min(
       fixedXOff,
       (bbox.max[0] - bbox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
     );
@@ -137,8 +139,9 @@ export function useJawProfile(): UseJawProfileReturn {
       return geo;
     };
 
-    const leftGeo  = buildBakedGeo(-fixedXOff);
-    const rightGeo = buildBakedGeo(+rightXOff);
+    // Both blanks symmetric — jaw pair closes around the part from both sides.
+    const leftGeo  = buildBakedGeo(-adaptiveXOff);
+    const rightGeo = buildBakedGeo(+adaptiveXOff);
 
     const makePayload = (
       geo: THREE.BufferGeometry,

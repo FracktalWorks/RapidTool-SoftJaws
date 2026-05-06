@@ -48,9 +48,10 @@ export function computeMountingHolePositions(
   viseConfig:    Pick<ViseConfig, 'jawWidth' | 'jawHeight' | 'jawStroke'>,
   jawBlank:      Pick<JawBlankConfig, 'thickness' | 'face'>,
   mountingHoles: Pick<MountingHolesConfig, 'count' | 'spacing' | 'boltSize'>,
+  adaptiveXOff?: number,  // jaw |x| center — overrides formula when part is loaded
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
-  const xCenterRight = innerX - jawBlank.thickness / 2;
+  const xCenterRight = adaptiveXOff ?? (innerX - jawBlank.thickness / 2);
   const yCenter      = bracketPillarCenterY(viseConfig);
 
   const count   = Math.max(1, Math.floor(mountingHoles.count));

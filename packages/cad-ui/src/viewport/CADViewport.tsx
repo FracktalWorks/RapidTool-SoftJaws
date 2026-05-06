@@ -28,7 +28,7 @@
  * }
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { NavigationHelp } from './NavigationHelp';
@@ -121,6 +121,16 @@ function SceneContent({
 }: SceneContentProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const colors = isDark ? GRID_COLORS.dark : GRID_COLORS.light;
+
+  // Toggle OrbitControls during PivotControls drag so they don't fight.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { disabled } = (e as CustomEvent<{ disabled: boolean }>).detail;
+      if (controlsRef.current) controlsRef.current.enabled = !disabled;
+    };
+    window.addEventListener('disable-orbit-controls', handler);
+    return () => window.removeEventListener('disable-orbit-controls', handler);
+  }, []);
 
   return (
     <>

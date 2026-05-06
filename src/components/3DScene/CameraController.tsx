@@ -19,6 +19,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import {
   jawBaseH,
   bracketInnerX,
@@ -58,18 +59,18 @@ function computeSceneBox(
   const baseH = jawBaseH(viseConfig.jawHeight);
 
   const innerX     = bracketInnerX(viseConfig);
-  const leftXOff   = innerX - jawBlank.thickness / 2;
+  const fixedXOff  = innerX - jawBlank.thickness / 2;
   const activePart = parts[parts.length - 1]; // most-recently imported
-  const rightXOff  = activePart
+  const adaptiveXOff = activePart
     ? Math.min(
-        leftXOff,
+        fixedXOff,
         (activePart.boundingBox.max[0] - activePart.boundingBox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
       )
-    : leftXOff;
+    : fixedXOff;
   const blankFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
   box.union(new THREE.Box3(
-    new THREE.Vector3(-leftXOff  - jawBlank.thickness / 2, baseH,                   -blankFace / 2),
-    new THREE.Vector3( rightXOff + jawBlank.thickness / 2, baseH + jawBlank.height,  blankFace / 2),
+    new THREE.Vector3(-adaptiveXOff - jawBlank.thickness / 2, baseH,                   -blankFace / 2),
+    new THREE.Vector3( adaptiveXOff + jawBlank.thickness / 2, baseH + jawBlank.height,  blankFace / 2),
   ));
 
   // Parts: centered in X/Z, sitting on rail surface
@@ -163,7 +164,7 @@ export function CameraController() {
   const { camera, gl, controls } = useThree();
   const parts      = useSoftJawsStore((s) => s.parts);
   const jawBlank   = useSoftJawsStore((s) => s.jawBlank);
-  const viseConfig = useSoftJawsStore((s) => s.viseConfig);
+  const viseConfig = useViseStore((s) => s.viseConfig);
   const clampGap   = useSoftJawsStore((s) => s.clampGap);
 
   const prevCountRef  = useRef<number>(parts.length);

@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { SelectableTransformControls } from '@rapidtool/cad-ui';
 import type { TransformData } from '@rapidtool/cad-ui';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import { jawBaseH } from '@/features/vise-config/data/presets';
 import type { ProcessedPart } from '@/stores/types';
@@ -112,17 +113,26 @@ function PartMesh({
     [part.id, onSelect],
   );
 
-  // ── Gizmo activated → stop R3F from fighting it ────────────────────────
+  // ── Gizmo activated/deactivated → guard useLayoutEffect ─────────────────
   const handleSelectionChange = useCallback((active: boolean) => {
-    if (active) setGizmoActive(true);
-    // Deactivation is handled in handleTransformChange after store is committed
+    if (active) {
+      setGizmoActive(true);
+    } else {
+      // SelectableTransformControls.deactivateGizmo() uses a
+      // requestAnimationFrame to bake the world position back onto the mesh
+      // and reset the pivot to identity. We must wait for that to complete
+      // before allowing useLayoutEffect to touch mesh.position again.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setGizmoActive(false);
+        });
+      });
+    }
   }, []);
 
   // ── Gizmo drag-end / close → bake world-space back into store ─────────
   const handleTransformChange = useCallback(
     ({ position: worldPos, rotation: worldRot }: TransformData) => {
-      // Commit to store first, then release gizmo ownership.
-      // This ensures useLayoutEffect picks up correct values on the next render.
       updatePartTransform(part.id, {
         position: {
           x: worldPos.x,
@@ -135,7 +145,11 @@ function PartMesh({
           z: worldRot.z * RAD2DEG,
         },
       });
-      setGizmoActive(false);
+      // Do NOT set gizmoActive = false here!
+      // This callback fires on every drag-end while the mesh is still a
+      // child of PivotControls. Setting gizmoActive=false would let
+      // useLayoutEffect apply world-space values in local space, doubling
+      // the offset. gizmoActive lifecycle is managed by handleSelectionChange.
     },
     [part.id, updatePartTransform, baseY],
   );
@@ -181,7 +195,7 @@ export function PartMeshes() {
   const parts         = useSoftJawsStore((s) => s.parts);
   const activePart    = useSoftJawsStore((s) => s.activePart);
   const setActivePart = useSoftJawsStore((s) => s.setActivePart);
-  const viseJawHeight = useSoftJawsStore((s) => s.viseConfig.jawHeight);
+  const viseJawHeight = useViseStore((s) => s.viseConfig.jawHeight);
 
   if (parts.length === 0) return null;
 

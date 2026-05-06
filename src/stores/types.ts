@@ -32,7 +32,7 @@ export interface ProcessedPart {
  * step. The `type` field is retained for forward compatibility if presets
  * ever return.
  */
-export type ViseType = 'custom';
+export type ViseType = 'custom' | 'kurt-d688' | 'schunk-ksr' | 'three-jaw-chuck' | 'four-jaw-chuck' | 'six-jaw-chuck';
 
 export interface ViseConfig {
   type: ViseType;
@@ -89,7 +89,6 @@ export interface SoftJawsState {
   parts: ProcessedPart[];
   activePart: string | null;
   clampGap: number;        // mm clearance between right jaw and part on import
-  viseConfig: ViseConfig;
   jawBlank: JawBlankConfig;
   jawProfile: JawProfileConfig;
   gripFeatures: GripFeaturesConfig;

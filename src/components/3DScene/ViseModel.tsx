@@ -19,7 +19,8 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
-import { computeViseGeometry } from '@/features/vise-config/data/presets';
+import { useViseStore } from '@/stores/viseStore';
+import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
@@ -147,10 +148,28 @@ function FlangeUSlot({ x, flangeHalfZ, slotW }: {
 // ─── ViseModel ───────────────────────────────────────────────────────────────
 
 export function ViseModel() {
-  const viseConfig    = useSoftJawsStore((s) => s.viseConfig);
-  const jawBlank      = useSoftJawsStore((s) => s.jawBlank);
-  const mountingHoles = useSoftJawsStore((s) => s.mountingHoles);
+  const viseConfig     = useViseStore((s) => s.viseConfig);
+  const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
+  const mountingHoles  = useSoftJawsStore((s) => s.mountingHoles);
+  const clampGap       = useSoftJawsStore((s) => s.clampGap);
+  const activePartBbox = useSoftJawsStore((s) => {
+    const id = s.activePart;
+    return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
+  });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
+
+  // Adaptive inner-face X — L-brackets slide inward to clamp the part, matching
+  // the jaw blank position exactly (same formula as JawBlankMesh / useJawProfile).
+  const adaptiveInnerX = useMemo(() => {
+    const fixedInnerX = bracketInnerX(viseConfig);
+    if (!activePartBbox) return fixedInnerX;
+    const partHalfX    = (activePartBbox.max[0] - activePartBbox.min[0]) / 2;
+    const adaptiveXOff = Math.min(
+      fixedInnerX - jawBlank.thickness / 2,
+      partHalfX + clampGap + jawBlank.thickness / 2,
+    );
+    return adaptiveXOff + jawBlank.thickness / 2;
+  }, [viseConfig, jawBlank, activePartBbox, clampGap]);
 
   // Pillar face tapped-hole positions — same layout as jaw counterbores.
   const pillarHoles = useMemo(
@@ -218,11 +237,10 @@ export function ViseModel() {
 
       {/* ── L-brackets × 2 (±X ends) ─────────────────────────────── */}
       {([-1, 1] as const).map((sign) => {
-        const footCX   = sign * d.brFootXOff;
-        const pillarCX = sign * d.brPillarXOff;
-
-        // Inner face X of pillar (workpiece-facing side).
-        const innerFaceX = sign * (d.brPillarXOff - d.brPillarLen / 2);
+        // L-bracket slides with the jaw blank — inner face tracks adaptiveInnerX.
+        const innerFaceX = sign * adaptiveInnerX;
+        const pillarCX   = sign * (adaptiveInnerX + d.brPillarLen / 2);
+        const footCX     = sign * (adaptiveInnerX + d.brFootLen  / 2);
 
         // 45° chamfer at the top-inner pillar edge — deburred machined finish.
         const chamferCX = innerFaceX + sign * (CHAMFER_C / 2);

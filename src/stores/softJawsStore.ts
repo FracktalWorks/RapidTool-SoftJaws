@@ -9,7 +9,6 @@ import type {
   SoftJawsState,
   ProcessedPart,
   PartTransform,
-  ViseConfig,
   JawBlankConfig,
   JawProfileConfig,
   GripFeaturesConfig,
@@ -21,15 +20,6 @@ const INITIAL_STATE: SoftJawsState = {
   parts: [],
   activePart: null,
   clampGap: 0.01,
-  viseConfig: {
-    type: 'custom',
-    jawCount: 2,
-    jawWidth: 150.0,
-    jawHeight: 65.0,
-    jawStroke: 180.0,
-    tSlotWidth: 14.0,
-    tSlotSpacing: 125.0,
-  },
   jawBlank: {
     face: 150.0,       // Z, matches jawWidth
     height: 65.0,      // Y, matches jawHeight
@@ -64,7 +54,6 @@ export interface SoftJawsActions {
   removePart: (id: string) => void;
   setActivePart: (id: string | null) => void;
   updatePartTransform: (id: string, transform: Partial<PartTransform>) => void;
-  updateViseConfig: (config: Partial<ViseConfig>) => void;
   updateJawBlank: (config: Partial<JawBlankConfig>) => void;
   updateJawProfile: (config: Partial<JawProfileConfig>) => void;
   updateGripFeatures: (config: Partial<GripFeaturesConfig>) => void;
@@ -105,11 +94,6 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
           if (!part) return;
           if (transform.position) Object.assign(part.transform.position, transform.position);
           if (transform.rotation) Object.assign(part.transform.rotation, transform.rotation);
-        }),
-
-      updateViseConfig: (config) =>
-        set((state) => {
-          Object.assign(state.viseConfig, config);
         }),
 
       updateJawBlank: (config) =>

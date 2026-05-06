@@ -76,7 +76,7 @@ input[type='number']::-webkit-outer-spin-button {
     --radius: 0.75rem;
 
     /* Sidebar Design — Light */
-    --sidebar-background: 0 0% 100%;
+    --sidebar-background: 0 0% 100% / 0.1; /* Transparent for tech-glass */
     --sidebar-foreground: 222.2 84% 4.9%;
     --sidebar-primary: 198 89% 50%;
     --sidebar-primary-foreground: 210 40% 98%;
@@ -134,7 +134,7 @@ input[type='number']::-webkit-outer-spin-button {
     --shadow-glow: 0 0 24px hsl(198 89% 50% / 0.2);
 
     /* Sidebar Design — Dark */
-    --sidebar-background: 220 13% 12%;
+    --sidebar-background: 220 13% 12% / 0.15; /* Translucent for tech-glass */
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 198 89% 50%;
     --sidebar-primary-foreground: 220 13% 8%;
@@ -158,7 +158,16 @@ input[type='number']::-webkit-outer-spin-button {
   .tech-glass {
     background: var(--gradient-glass);
     backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--border));
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid hsl(var(--border) / 0.5);
+    border-left: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Target cad-ui sidebars to apply tech-glass globally */
+  .cad-ui-sidebar, [data-sidebar="true"], aside, header, nav[role="toolbar"] {
+    background: var(--gradient-glass) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
   }
 
   .tech-glow:hover {

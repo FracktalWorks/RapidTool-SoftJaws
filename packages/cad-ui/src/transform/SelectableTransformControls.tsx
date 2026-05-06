@@ -16,7 +16,6 @@ import {
   PART_TRANSFORM_CONFIG,
   setOrbitControlsEnabled,
   resetPivotMatrix,
-  calculateGizmoScale,
   TransformConfig,
 } from '@rapidtool/cad-core';
 
@@ -185,11 +184,19 @@ export const SelectableTransformControls: React.FC<SelectableTransformControlsPr
 
   const activateGizmo = useCallback(() => {
     if (!meshRef.current || !pivotRef.current) return;
-    
+
     const mesh = meshRef.current;
     const pivot = pivotRef.current;
-    
+
     mesh.updateMatrixWorld(true);
+
+    // Compute bounds immediately so gizmoScale is correct on the first render
+    // (useFrame only computes bounds when enabled=true, which lags by one render).
+    tempBox.setFromObject(mesh);
+    tempBox.getCenter(tempCenter);
+    tempBox.getSize(tempSize);
+    const initRadius = Math.max(tempSize.x, tempSize.y, tempSize.z) / 2;
+    setBounds({ center: tempCenter.clone(), size: tempSize.clone(), radius: initRadius });
     
     const meshWorldPos = new THREE.Vector3();
     const meshWorldQuat = new THREE.Quaternion();
@@ -207,10 +214,10 @@ export const SelectableTransformControls: React.FC<SelectableTransformControlsPr
     mesh.updateMatrixWorld(true);
     
     window.dispatchEvent(new CustomEvent('pivot-control-activated', { detail: { partId } }));
-    
+
     setIsActive(true);
     onSelectionChange?.(true);
-  }, [meshRef, onSelectionChange, partId]);
+  }, [meshRef, onSelectionChange, partId, setBounds]);
 
   const deactivateGizmo = useCallback(async () => {
     setOrbitControlsEnabled(true);
@@ -389,8 +396,10 @@ export const SelectableTransformControls: React.FC<SelectableTransformControlsPr
   // Computed Values
   // ============================================================================
 
-  const gizmoScale = useMemo(() => 
-    bounds ? calculateGizmoScale('part', { radius: bounds.radius }) : 50, 
+  // Scale gizmo handles to just exceed the part's bounding sphere — handles land
+  // at the part's edge, not floating far away. Min 15 for tiny parts.
+  const gizmoScale = useMemo(() =>
+    bounds ? Math.max(bounds.radius * 1.2, 15) : 20,
     [bounds]
   );
 

@@ -98,7 +98,7 @@ export function ContextOptionsPanel() {
   const skippedCount   = skippedSteps.length;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 tech-glass h-full">
       {/* ── Step Header ──────────────────────────────────────────── */}
       <div className="p-4 border-b border-border/50">
         <div className="flex items-center gap-3 mb-2">

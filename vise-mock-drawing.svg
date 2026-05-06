@@ -1,0 +1,454 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" width="1200" height="820"
+     font-family="'Courier New', monospace" font-size="9">
+
+  <rect width="1200" height="820" fill="#f0f2f5"/>
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M20,0L0,0L0,20" fill="none" stroke="#e2e5ea" stroke-width="0.4"/>
+    </pattern>
+    <marker id="aL" markerWidth="6" markerHeight="6" refX="1" refY="3" orient="auto"><path d="M6,0L0,3L6,6Z" fill="#444"/></marker>
+    <marker id="aR" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0L6,3L0,6Z" fill="#444"/></marker>
+    <marker id="aU" markerWidth="6" markerHeight="6" refX="3" refY="0" orient="auto"><path d="M0,6L3,0L6,6Z" fill="#444"/></marker>
+    <marker id="aD" markerWidth="6" markerHeight="6" refX="3" refY="6" orient="auto"><path d="M0,0L3,6L6,0Z" fill="#444"/></marker>
+    <marker id="oL" markerWidth="6" markerHeight="6" refX="1" refY="3" orient="auto"><path d="M6,0L0,3L6,6Z" fill="#e67e22"/></marker>
+    <marker id="oR" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0L6,3L0,6Z" fill="#e67e22"/></marker>
+    <marker id="rL" markerWidth="6" markerHeight="6" refX="1" refY="3" orient="auto"><path d="M6,0L0,3L6,6Z" fill="#e74c3c"/></marker>
+    <marker id="rR" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0L6,3L0,6Z" fill="#e74c3c"/></marker>
+  </defs>
+  <rect width="1200" height="820" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="1200" height="26" fill="#1a2035"/>
+  <text x="600" y="17" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">
+    ViseModel — 2-TIER BODY  ·  L-bracket (foot + pillar)  ·  4× SHCS on pillar-top only  ·  2 cbore holes / jaw
+  </text>
+
+  <!-- ═══════════════════════════════════════════════
+       PANEL A  —  SIDE VIEW  (X–Y)
+       jaw: W=125 H=80 stroke=100  →  bodyLen=212
+       scale 1.3 px/mm
+       bodyH = 80*0.55 = 44  → 57px
+       T1H=11→14px  T2H=33→43px  (merged)
+       foot H=8px  pillarH=70→91px
+       origin: (55, 335)
+       ═══════════════════════════════════════════════ -->
+
+  <rect x="8" y="30" width="385" height="345" rx="3" fill="#fff" stroke="#ccc"/>
+  <rect x="8" y="30" width="385" height="18" rx="3" fill="#e8ecf0"/>
+  <text x="200" y="43" text-anchor="middle" font-weight="bold" fill="#1a2035">A.  SIDE VIEW  (X – Y)</text>
+
+  <!-- axis -->
+  <g transform="translate(28,52)">
+    <line x1="0" y1="0" x2="26" y2="0" stroke="#e74c3c" stroke-width="1.2" marker-end="url(#aR)"/>
+    <text x="30" y="4" font-size="8" fill="#e74c3c">X</text>
+    <line x1="0" y1="0" x2="0" y2="-22" stroke="#27ae60" stroke-width="1.2" marker-end="url(#aU)"/>
+    <text x="-9" y="-25" font-size="8" fill="#27ae60">Y</text>
+  </g>
+
+  <g transform="translate(55,335)">
+
+    <!-- ground -->
+    <line x1="-6" y1="0" x2="284" y2="0" stroke="#bbb" stroke-width="0.7" stroke-dasharray="4,3"/>
+
+    <!-- TIER 1: full length, full width in Z -->
+    <rect x="0" y="-14" width="276" height="14" fill="#c9cfd6" stroke="#4e5a66" stroke-width="1.4"/>
+    <text x="138" y="-4" text-anchor="middle" fill="#555" font-size="7.5">TIER 1 — full jawWidth</text>
+
+    <!-- TIER 2: same X, narrower Z (shown same width in side view, taller) -->
+    <rect x="0" y="-57" width="276" height="43" fill="#b8c0c8" stroke="#4e5a66" stroke-width="1.4"/>
+    <text x="138" y="-33" text-anchor="middle" fill="#444" font-size="7.5">TIER 2 — narrower Z (TIER2_W_FRAC × jawWidth)</text>
+
+    <!-- side step indicator -->
+    <line x1="0"   y1="-14" x2="-10" y2="-14" stroke="#3498db" stroke-width="0.8"/>
+    <line x1="0"   y1="-57" x2="-10" y2="-57" stroke="#3498db" stroke-width="0.8"/>
+    <line x1="-10" y1="-14" x2="-10" y2="-57" stroke="#3498db" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="-13" y="-35" text-anchor="end" font-size="7" fill="#3498db">Z-step</text>
+    <text x="-13" y="-27" text-anchor="end" font-size="7" fill="#3498db">ledge</text>
+
+    <!-- rail surface -->
+    <line x1="27" y1="-57" x2="249" y2="-57" stroke="#c0392b" stroke-width="0.9" stroke-dasharray="5,3"/>
+    <text x="138" y="-60" text-anchor="middle" fill="#c0392b" font-size="7.5">rail Y = jawBaseH</text>
+
+    <!-- LEFT L-bracket: foot -->
+    <rect x="0" y="-67" width="30" height="10" fill="#a8b0b8" stroke="#4e5a66" stroke-width="1.4"/>
+    <!-- LEFT L-bracket: pillar -->
+    <rect x="0" y="-158" width="27" height="91" fill="#a8b0b8" stroke="#4e5a66" stroke-width="1.4"/>
+    <!-- seating step: inner face top -->
+    <rect x="26" y="-158" width="4" height="6" fill="#5a606a"/>
+
+    <!-- RIGHT L-bracket: foot -->
+    <rect x="246" y="-67" width="30" height="10" fill="#a8b0b8" stroke="#4e5a66" stroke-width="1.4"/>
+    <!-- RIGHT L-bracket: pillar (dashed — movable side) -->
+    <rect x="249" y="-158" width="27" height="91" fill="#a8b0b8" stroke="#4e5a66" stroke-width="1.4" stroke-dasharray="6,3"/>
+    <rect x="249" y="-158" width="4" height="6" fill="#5a606a"/>
+
+    <!-- LEFT jaw blank (fixed) -->
+    <rect x="27" y="-170" width="28" height="113" fill="#252830" stroke="#111" stroke-width="1.3"/>
+    <!-- 2 cbore holes — single row -->
+    <circle cx="27" cy="-118" r="5.5" fill="#3a3f47" stroke="#555" stroke-width="0.8"/>
+    <circle cx="27" cy="-118" r="2.8" fill="#111"/>
+    <text x="15" y="-166" text-anchor="middle" fill="#aaa" font-size="7">JAW</text>
+
+    <!-- RIGHT jaw blank (movable, dashed) -->
+    <rect x="221" y="-170" width="28" height="113" fill="#252830" stroke="#111" stroke-width="1.3" stroke-dasharray="5,2"/>
+    <circle cx="249" cy="-118" r="5.5" fill="#3a3f47" stroke="#555" stroke-width="0.8"/>
+    <circle cx="249" cy="-118" r="2.8" fill="#111"/>
+
+    <!-- bracketInnerX reference -->
+    <line x1="27" y1="-175" x2="249" y2="-175" stroke="#e67e22" stroke-width="0.9" stroke-dasharray="5,3"/>
+    <text x="138" y="-178" text-anchor="middle" fill="#e67e22" font-size="7">bracketInnerX — INVARIANT</text>
+
+    <!-- L-bracket callout -->
+    <text x="-32" y="-115" fill="#2980b9" font-size="9" font-weight="bold">L</text>
+    <text x="-44" y="-104" fill="#2980b9" font-size="7">pillar</text>
+    <line x1="-10" y1="-103" x2="0" y2="-110" stroke="#2980b9" stroke-width="0.7"/>
+    <text x="-44" y="-61" fill="#2980b9" font-size="7">foot</text>
+    <line x1="-10" y1="-62" x2="0" y2="-62" stroke="#2980b9" stroke-width="0.7"/>
+
+    <!-- dims: bodyLen -->
+    <line x1="0" y1="18" x2="276" y2="18" stroke="#333" stroke-width="0.9" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="138" y="28" text-anchor="middle" fill="#333">bodyLen  (X)</text>
+
+    <!-- dims: heights -->
+    <line x1="292" y1="0"    x2="292" y2="-14"  stroke="#555" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="296" y="-6"   fill="#555" font-size="7">T1H</text>
+    <line x1="292" y1="-14"  x2="292" y2="-57"  stroke="#555" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="296" y="-34"  fill="#555" font-size="7">T2H</text>
+    <line x1="292" y1="-57"  x2="292" y2="-67"  stroke="#888" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="296" y="-61"  fill="#888" font-size="6.5">fH</text>
+    <line x1="292" y1="-67"  x2="292" y2="-158" stroke="#9b59b6" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="296" y="-117" fill="#9b59b6" font-size="7">pillarH</text>
+    <text x="296" y="-107" fill="#9b59b6" font-size="7">≈ jawH</text>
+    <line x1="315" y1="-57"  x2="315" y2="-170" stroke="#252830" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="319" y="-113" fill="#333" font-size="7">jawH</text>
+
+    <!-- footLen -->
+    <line x1="0" y1="-172" x2="30" y2="-172" stroke="#8e44ad" stroke-width="0.8" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="15" y="-175" text-anchor="middle" fill="#8e44ad" font-size="6.5">fLen</text>
+
+  </g>
+
+
+  <!-- ═══════════════════════════════════════════════
+       PANEL B  —  FRONT ELEVATION  (Z–Y)
+       Shows Z-step: tier1 full width, tier2 narrower
+       jaw blank face + 2 cbore holes (horizontal row)
+       origin: (450, 335)
+       ═══════════════════════════════════════════════ -->
+
+  <rect x="402" y="30" width="300" height="345" rx="3" fill="#fff" stroke="#ccc"/>
+  <rect x="402" y="30" width="300" height="18" rx="3" fill="#e8ecf0"/>
+  <text x="552" y="43" text-anchor="middle" font-weight="bold" fill="#1a2035">B.  FRONT ELEVATION  (Z – Y)</text>
+
+  <!-- axis -->
+  <g transform="translate(422,52)">
+    <line x1="0" y1="0" x2="26" y2="0" stroke="#3498db" stroke-width="1.2" marker-end="url(#aR)"/>
+    <text x="30" y="4" font-size="8" fill="#3498db">Z</text>
+    <line x1="0" y1="0" x2="0" y2="-22" stroke="#27ae60" stroke-width="1.2" marker-end="url(#aU)"/>
+    <text x="-9" y="-25" font-size="8" fill="#27ae60">Y</text>
+  </g>
+
+  <g transform="translate(430,335)">
+
+    <!-- TIER 1: full jawWidth -->
+    <rect x="0" y="-14" width="224" height="14" fill="#c9cfd6" stroke="#4e5a66" stroke-width="1.4"/>
+
+    <!-- TIER 2: narrower in Z — inset 12px each side (TIER2_W_FRAC=0.85 → 190px, inset=17px) -->
+    <!-- visible step ledges left + right -->
+    <rect x="0"   y="-57" width="17"  height="43" fill="#c4cad0" stroke="#4e5a66" stroke-width="1.4"/>
+    <rect x="207" y="-57" width="17"  height="43" fill="#c4cad0" stroke="#4e5a66" stroke-width="1.4"/>
+    <!-- main tier2 body -->
+    <rect x="17"  y="-57" width="190" height="43" fill="#b8c0c8" stroke="#4e5a66" stroke-width="1.4"/>
+
+    <!-- step ledge labels -->
+    <text x="-3" y="-35" text-anchor="end" fill="#3498db" font-size="7">Z</text>
+    <text x="-3" y="-27" text-anchor="end" fill="#3498db" font-size="7">step</text>
+
+    <!-- tier-1 front-face mount holes ×3 -->
+    <circle cx="37"  cy="-7" r="6.5" fill="#888" stroke="#444" stroke-width="1"/>
+    <circle cx="37"  cy="-7" r="3"   fill="#111"/>
+    <circle cx="112" cy="-7" r="6.5" fill="#888" stroke="#444" stroke-width="1"/>
+    <circle cx="112" cy="-7" r="3"   fill="#111"/>
+    <circle cx="187" cy="-7" r="6.5" fill="#888" stroke="#444" stroke-width="1"/>
+    <circle cx="187" cy="-7" r="3"   fill="#111"/>
+    <text x="112" y="-23" text-anchor="middle" fill="#666" font-size="7.5">3× Ø6 bed mount holes (tier-1 ±Z face)</text>
+
+    <!-- jaw blank -->
+    <rect x="38" y="-170" width="148" height="113" fill="#252830" stroke="#111" stroke-width="1.5"/>
+    <text x="112" y="-108" text-anchor="middle" fill="#ccc" font-size="8.5">SOFT JAW</text>
+
+    <!-- seating step strip at top of jaw -->
+    <rect x="38" y="-170" width="148" height="5" fill="#4a5060"/>
+
+    <!-- 2 cbore holes — single horizontal row at pillar mid-Y -->
+    <circle cx="74"  cy="-118" r="16" fill="#3a3f47" stroke="#666" stroke-width="1.2"/>
+    <circle cx="74"  cy="-118" r="8"  fill="#111"/>
+    <circle cx="150" cy="-118" r="16" fill="#3a3f47" stroke="#666" stroke-width="1.2"/>
+    <circle cx="150" cy="-118" r="8"  fill="#111"/>
+
+    <!-- R1 / R2 labels -->
+    <line x1="74" y1="-102" x2="74" y2="-134" stroke="#e74c3c" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <line x1="74" y1="-102" x2="90" y2="-95"  stroke="#e74c3c" stroke-width="0.8"/>
+    <text x="92" y="-93" fill="#e74c3c" font-size="7.5">R₁ outer ring</text>
+    <line x1="74" y1="-110" x2="82" y2="-110" stroke="#3498db" stroke-width="0.8"/>
+    <line x1="82" y1="-110" x2="90" y2="-105" stroke="#3498db" stroke-width="0.8"/>
+    <text x="92" y="-103" fill="#3498db" font-size="7.5">R₂ shank bore</text>
+
+    <!-- Z-spacing dim -->
+    <line x1="74" y1="-148" x2="150" y2="-148" stroke="#e67e22" stroke-width="0.9" marker-start="url(#oL)" marker-end="url(#oR)"/>
+    <text x="112" y="-152" text-anchor="middle" fill="#e67e22" font-size="7.5">Z hole spacing</text>
+
+    <!-- label: 2 holes only -->
+    <text x="112" y="-176" text-anchor="middle" fill="#e74c3c" font-size="8" font-weight="bold">★  2 holes only  (single horizontal row)</text>
+
+    <!-- jawWidth dim -->
+    <line x1="0" y1="14" x2="224" y2="14" stroke="#333" stroke-width="0.9" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="112" y="24" text-anchor="middle" fill="#333">jawWidth  (Z)</text>
+
+    <!-- tier2W step -->
+    <line x1="17" y1="-62" x2="207" y2="-62" stroke="#3498db" stroke-width="0.8" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="112" y="-65" text-anchor="middle" fill="#3498db" font-size="7">tier2W  (TIER2_W_FRAC × jawWidth)</text>
+
+    <!-- heights right side -->
+    <line x1="236" y1="0"   x2="236" y2="-14"  stroke="#555" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="240" y="-6"   fill="#555" font-size="6.5">T1H</text>
+    <line x1="236" y1="-14" x2="236" y2="-57"  stroke="#555" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="240" y="-34"  fill="#555" font-size="6.5">T2H</text>
+    <line x1="254" y1="-57" x2="254" y2="-170" stroke="#333" stroke-width="0.8" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="258" y="-113" fill="#333" font-size="6.5">jawH</text>
+
+  </g>
+
+
+  <!-- ═══════════════════════════════════════════════
+       PANEL C  —  PILLAR TOP  +  COUNTERBORE DETAIL
+       ═══════════════════════════════════════════════ -->
+
+  <rect x="712" y="30" width="476" height="345" rx="3" fill="#fff" stroke="#ccc"/>
+  <rect x="712" y="30" width="476" height="18" rx="3" fill="#e8ecf0"/>
+  <text x="950" y="43" text-anchor="middle" font-weight="bold" fill="#1a2035">C.  PILLAR TOP (↓)  +  COUNTERBORE CROSS-SECTION</text>
+
+  <!-- Pillar top plan -->
+  <g transform="translate(730, 100)">
+    <text x="60" y="-8" text-anchor="middle" fill="#333" font-weight="bold" font-size="9">Pillar top face</text>
+    <!-- pillar face: ~pillarLen × pillarW -->
+    <rect x="0" y="0" width="120" height="85" fill="#c8d0d8" stroke="#4e5a66" stroke-width="1.5"/>
+    <!-- seating step top edge -->
+    <rect x="0" y="0" width="120" height="7" fill="#5a606a"/>
+    <text x="60" y="-1" text-anchor="middle" fill="#ddd" font-size="6.5">← 5 mm seating step →</text>
+
+    <!-- 4 SHCS in 2×2 grid -->
+    <circle cx="30" cy="30" r="10" fill="#3d4249" stroke="#555" stroke-width="1.1"/>
+    <circle cx="30" cy="30" r="5"  fill="#0d0f14"/>
+    <circle cx="90" cy="30" r="10" fill="#3d4249" stroke="#555" stroke-width="1.1"/>
+    <circle cx="90" cy="30" r="5"  fill="#0d0f14"/>
+    <circle cx="30" cy="62" r="10" fill="#3d4249" stroke="#555" stroke-width="1.1"/>
+    <circle cx="30" cy="62" r="5"  fill="#0d0f14"/>
+    <circle cx="90" cy="62" r="10" fill="#3d4249" stroke="#555" stroke-width="1.1"/>
+    <circle cx="90" cy="62" r="5"  fill="#0d0f14"/>
+
+    <!-- dims -->
+    <line x1="30" y1="78" x2="90" y2="78" stroke="#e67e22" stroke-width="0.9" marker-start="url(#oL)" marker-end="url(#oR)"/>
+    <text x="60" y="88" text-anchor="middle" fill="#e67e22" font-size="7.5">Z bolt pitch</text>
+    <line x1="130" y1="30" x2="130" y2="62" stroke="#e67e22" stroke-width="0.9" marker-start="url(#aD)" marker-end="url(#aU)"/>
+    <text x="134" y="49" fill="#e67e22" font-size="7">Y pitch</text>
+
+    <text x="60" y="104" text-anchor="middle" fill="#333" font-size="8">4× M6 SHCS — bolt pillar to vise body</text>
+    <text x="60" y="116" text-anchor="middle" fill="#e74c3c" font-size="8" font-weight="bold">★  ONLY on pillar top — NOT on body top ★</text>
+
+    <!-- axis -->
+    <line x1="-22" y1="42" x2="-4"  y2="42" stroke="#e74c3c" stroke-width="1.1" marker-end="url(#rR)"/>
+    <text x="-28" y="46" font-size="7" fill="#e74c3c">X</text>
+    <line x1="-22" y1="42" x2="-22" y2="24" stroke="#3498db" stroke-width="1.1" marker-end="url(#aU)"/>
+    <text x="-30" y="21" font-size="7" fill="#3498db">Z</text>
+  </g>
+
+  <!-- Counterbore cross-section -->
+  <g transform="translate(880, 80)">
+    <text x="110" y="0" text-anchor="middle" fill="#333" font-weight="bold" font-size="9">Counterbore cross-section (jaw inner face → pillar)</text>
+
+    <!-- jaw blank -->
+    <rect x="50" y="14" width="80" height="140" fill="#252830" stroke="#111" stroke-width="1.3"/>
+    <text x="90" y="28" text-anchor="middle" fill="#aaa" font-size="7.5">JAW BLANK</text>
+
+    <!-- pillar -->
+    <rect x="130" y="28" width="90" height="126" fill="#b8c0c8" stroke="#4e5a66" stroke-width="1.3"/>
+    <text x="175" y="42" text-anchor="middle" fill="#555" font-size="7.5">PILLAR</text>
+
+    <!-- counterbore cavity in jaw -->
+    <rect x="30" y="70" width="38" height="25" fill="#0a0c10"/>
+    <!-- counterbore taper -->
+    <polygon points="50,70 68,76 68,95 50,95" fill="#181c22"/>
+    <!-- through hole — shank into pillar -->
+    <rect x="68" y="77" width="82" height="12" fill="#0a0c10"/>
+    <!-- half-depth marker in pillar -->
+    <line x1="130" y1="73" x2="130" y2="93" stroke="#27ae60" stroke-width="1.1" stroke-dasharray="3,2"/>
+    <text x="132" y="86" fill="#27ae60" font-size="6.5">½ depth</text>
+
+    <!-- SHCS head -->
+    <circle cx="35" cy="82" r="15" fill="#353a40" stroke="#666" stroke-width="1"/>
+    <circle cx="35" cy="82" r="7.5" fill="#0a0c10"/>
+
+    <!-- R1 dim -->
+    <line x1="30" y1="60" x2="68" y2="60" stroke="#e74c3c" stroke-width="0.9" marker-start="url(#rL)" marker-end="url(#rR)"/>
+    <text x="49"  y="57" text-anchor="middle" fill="#e74c3c" font-size="7">R₁  counterbore</text>
+    <!-- R2 dim -->
+    <line x1="68" y1="50" x2="130" y2="50" stroke="#3498db" stroke-width="0.9" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="99"  y="47" text-anchor="middle" fill="#3498db" font-size="7">R₂  shank bore</text>
+
+    <!-- face labels -->
+    <line x1="50"  y1="9"  x2="50"  y2="12" stroke="#e67e22" stroke-width="0.8"/>
+    <text x="50"  y="7" text-anchor="middle" fill="#e67e22" font-size="7">inner face</text>
+    <line x1="130" y1="23" x2="130" y2="26" stroke="#888" stroke-width="0.8"/>
+    <text x="130" y="21" text-anchor="middle" fill="#888" font-size="7">pillar face</text>
+
+    <!-- depth labels -->
+    <line x1="50"  y1="166" x2="68"  y2="166" stroke="#e74c3c" stroke-width="0.8" marker-start="url(#rL)" marker-end="url(#rR)"/>
+    <text x="59"   y="175" text-anchor="middle" fill="#e74c3c" font-size="6.5">cb depth</text>
+    <line x1="130" y1="166" x2="152" y2="166" stroke="#27ae60" stroke-width="0.8" marker-start="url(#aL)" marker-end="url(#aR)"/>
+    <text x="141"  y="175" text-anchor="middle" fill="#27ae60" font-size="6.5">½ pillarLen</text>
+  </g>
+
+
+  <!-- ═══════════════════════════════════════════════
+       PANEL D  —  ISOMETRIC ASSEMBLY
+       ═══════════════════════════════════════════════ -->
+
+  <rect x="8" y="383" width="1184" height="380" rx="3" fill="#fff" stroke="#ccc"/>
+  <rect x="8" y="383" width="1184" height="18" rx="3" fill="#e8ecf0"/>
+  <text x="600" y="396" text-anchor="middle" font-weight="bold" fill="#1a2035">
+    D.  FULL ASSEMBLY — ISOMETRIC  ·  LEFT fixed  ·  RIGHT auto-closes to 0.01 mm gap on import
+  </text>
+
+  <!-- iso transform origin ~(190,740) -->
+  <g transform="translate(200,740)">
+
+    <!-- ── TIER 1: base slab, full jawWidth ── -->
+    <!-- front face -->
+    <polygon points="0,0  420,0  420,-18  0,-18"       fill="#c9cfd6" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- top face -->
+    <polygon points="0,-18  420,-18  460,-46  40,-46"  fill="#d4d9de" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- right side face -->
+    <polygon points="420,0  460,-28  460,-46  420,-18" fill="#b8bec5" stroke="#4e5a66" stroke-width="1.3"/>
+
+    <!-- 3 mount holes on tier-1 front face -->
+    <ellipse cx="80"  cy="-9" rx="6"  ry="5.5"  fill="#888" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="80"  cy="-9" rx="2.8" ry="2.6" fill="#111"/>
+    <ellipse cx="210" cy="-9" rx="6"  ry="5.5"  fill="#888" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="210" cy="-9" rx="2.8" ry="2.6" fill="#111"/>
+    <ellipse cx="340" cy="-9" rx="6"  ry="5.5"  fill="#888" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="340" cy="-9" rx="2.8" ry="2.6" fill="#111"/>
+
+    <text x="-14" y="-7" text-anchor="end" fill="#888" font-size="7.5">mount holes ×3</text>
+    <line x1="-3" y1="-7" x2="16" y2="-9" stroke="#888" stroke-width="0.6"/>
+
+    <!-- ── TIER 2: same X, narrower Z (~TIER2_W_FRAC) — step inset=12px each side ── -->
+    <!-- front face -->
+    <polygon points="12,-18  408,-18  408,-61  12,-61"      fill="#b8c0c8" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- top face -->
+    <polygon points="12,-61  408,-61  448,-89  52,-89"      fill="#c8d0d8" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- right side face -->
+    <polygon points="408,-18  448,-46  448,-89  408,-61"    fill="#aab0b8" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- left step ledge (tier1 wider) visible on near face -->
+    <line x1="0"   y1="-18" x2="12"  y2="-18" stroke="#4e5a66" stroke-width="1.3"/>
+    <line x1="420" y1="-18" x2="408" y2="-18" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- step annotation -->
+    <text x="-14" y="-36" text-anchor="end" fill="#3498db" font-size="7.5">2-tier</text>
+    <text x="-14" y="-27" text-anchor="end" fill="#3498db" font-size="7.5">Z-step</text>
+    <line x1="-3" y1="-30" x2="8" y2="-38" stroke="#3498db" stroke-width="0.6"/>
+
+    <!-- ── LEFT L-BRACKET (fixed end-stop) ── -->
+    <!-- foot: front face -->
+    <polygon points="0,-61  40,-61  40,-71  0,-71"          fill="#a0a8b0" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- foot: top face -->
+    <polygon points="0,-71  40,-71  80,-99  40,-99"         fill="#b8c0c8" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- foot: right face -->
+    <polygon points="40,-61  80,-89  80,-99  40,-71"        fill="#9098a0" stroke="#4e5a66" stroke-width="1.3"/>
+
+    <!-- pillar: front face -->
+    <polygon points="0,-71  36,-71  36,-186  0,-186"        fill="#a0a8b0" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- pillar: top face -->
+    <polygon points="0,-186  36,-186  76,-214  40,-214"     fill="#c8d0d8" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- pillar: right face -->
+    <polygon points="36,-71  76,-99  76,-214  36,-186"      fill="#8890a0" stroke="#4e5a66" stroke-width="1.3"/>
+    <!-- seating step on inner top of pillar (right face top edge) -->
+    <rect x="35" y="-186" width="4" height="7" fill="#5a606a"/>
+
+    <!-- 4× SHCS on LEFT pillar top (isometric ellipses) -->
+    <ellipse cx="10"  cy="-198" rx="5.5" ry="3.5" fill="#3d4249" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="10"  cy="-198" rx="2.8" ry="1.8" fill="#0d0f14"/>
+    <ellipse cx="26"  cy="-198" rx="5.5" ry="3.5" fill="#3d4249" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="26"  cy="-198" rx="2.8" ry="1.8" fill="#0d0f14"/>
+    <ellipse cx="44"  cy="-206" rx="5.5" ry="3.5" fill="#3d4249" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="44"  cy="-206" rx="2.8" ry="1.8" fill="#0d0f14"/>
+    <ellipse cx="60"  cy="-206" rx="5.5" ry="3.5" fill="#3d4249" stroke="#444" stroke-width="0.9"/>
+    <ellipse cx="60"  cy="-206" rx="2.8" ry="1.8" fill="#0d0f14"/>
+    <text x="-14" y="-208" text-anchor="end" fill="#e74c3c" font-size="7.5" font-weight="bold">4× SHCS</text>
+    <text x="-14" y="-198" text-anchor="end" fill="#e74c3c" font-size="7">pillar top only</text>
+    <line x1="-3" y1="-204" x2="7" y2="-200" stroke="#e74c3c" stroke-width="0.6"/>
+
+    <!-- ── LEFT JAW BLANK ── -->
+    <polygon points="36,-61  80,-61  80,-194  36,-194"      fill="#252830" stroke="#111" stroke-width="1.3"/>
+    <polygon points="36,-194  80,-194  120,-222  76,-222"   fill="#1e2026" stroke="#111" stroke-width="1.3"/>
+    <polygon points="80,-61  120,-89  120,-222  80,-194"    fill="#1a1d22" stroke="#111" stroke-width="1.3"/>
+    <!-- 2 cbore holes on LEFT jaw blank front face -->
+    <ellipse cx="52"  cy="-128" rx="11" ry="10.5" fill="#3a3f47" stroke="#555" stroke-width="0.9"/>
+    <ellipse cx="52"  cy="-128" rx="5.5" ry="5.3" fill="#111"/>
+    <ellipse cx="66"  cy="-128" rx="11" ry="10.5" fill="#3a3f47" stroke="#555" stroke-width="0.9"/>
+    <ellipse cx="66"  cy="-128" rx="5.5" ry="5.3" fill="#111"/>
+    <text x="-14" y="-126" text-anchor="end" fill="#aaa" font-size="7">2 cbore</text>
+    <text x="-14" y="-116" text-anchor="end" fill="#aaa" font-size="7">holes</text>
+    <line x1="-3" y1="-120" x2="36" y2="-128" stroke="#888" stroke-width="0.6"/>
+
+    <!-- ── WORKPIECE ── -->
+    <polygon points="80,-71  348,-71  348,-188  80,-188"         fill="#3498db" fill-opacity="0.15" stroke="#3498db" stroke-width="1.2" stroke-dasharray="7,3"/>
+    <polygon points="80,-188  348,-188  388,-216  120,-216"      fill="#3498db" fill-opacity="0.08" stroke="#3498db" stroke-width="1.2" stroke-dasharray="7,3"/>
+    <text x="214" y="-123" text-anchor="middle" fill="#2980b9" font-size="10" font-weight="bold">WORKPIECE</text>
+
+    <!-- clampGap LEFT -->
+    <line x1="79"  y1="-140" x2="80"  y2="-140" stroke="#27ae60" stroke-width="2"/>
+    <text x="77"   y="-155" text-anchor="end" fill="#27ae60" font-size="7.5">0.01 mm gap</text>
+    <line x1="77"  y1="-152" x2="79" y2="-143" stroke="#27ae60" stroke-width="0.6"/>
+    <!-- clampGap RIGHT -->
+    <line x1="347" y1="-140" x2="348" y2="-140" stroke="#e74c3c" stroke-width="2"/>
+    <text x="350"  y="-155" fill="#e74c3c" font-size="7.5">clampGap (editable)</text>
+    <line x1="352" y1="-152" x2="349" y2="-143" stroke="#e74c3c" stroke-width="0.6"/>
+
+    <!-- ── RIGHT MOVABLE JAW BLANK + L-bracket ── -->
+    <!-- Right pillar (dashed — movable side) -->
+    <polygon points="348,-71  390,-71  390,-186  348,-186"    fill="#a8b0b8" stroke="#4e5a66" stroke-width="1.3" stroke-dasharray="7,3"/>
+    <polygon points="348,-186 390,-186 430,-214  388,-214"   fill="#c0c8d0" stroke="#4e5a66" stroke-width="1.3" stroke-dasharray="7,3"/>
+    <polygon points="390,-71  430,-99  430,-214  390,-186"   fill="#9098a8" stroke="#4e5a66" stroke-width="1.3" stroke-dasharray="7,3"/>
+
+    <!-- RIGHT jaw blank -->
+    <polygon points="308,-61  348,-61  348,-194  308,-194"    fill="#252830" stroke="#111" stroke-width="1.3"/>
+    <polygon points="308,-194 348,-194 388,-222  348,-222"   fill="#1e2026" stroke="#111" stroke-width="1.3"/>
+    <polygon points="348,-61  388,-89  388,-222  348,-194"   fill="#1a1d22" stroke="#111" stroke-width="1.3"/>
+    <ellipse cx="320" cy="-128" rx="11" ry="10.5" fill="#3a3f47" stroke="#555" stroke-width="0.9"/>
+    <ellipse cx="320" cy="-128" rx="5.5" ry="5.3" fill="#111"/>
+    <ellipse cx="336" cy="-128" rx="11" ry="10.5" fill="#3a3f47" stroke="#555" stroke-width="0.9"/>
+    <ellipse cx="336" cy="-128" rx="5.5" ry="5.3" fill="#111"/>
+
+    <!-- move arrow on right jaw -->
+    <line x1="348" y1="-140" x2="334" y2="-140" stroke="#e74c3c" stroke-width="1.8" marker-end="url(#rL)"/>
+    <text x="392" y="-56" fill="#e74c3c" font-size="8" font-weight="bold">RIGHT</text>
+    <text x="392" y="-66" fill="#e74c3c" font-size="7.5">(auto-moves)</text>
+    <text x="392" y="-76" fill="#e74c3c" font-size="7">on import</text>
+
+    <!-- bracketInnerX reference line -->
+    <line x1="36"  y1="-202" x2="348" y2="-202" stroke="#e67e22" stroke-width="0.9" stroke-dasharray="5,3"/>
+    <text x="192"  y="-205" text-anchor="middle" fill="#e67e22" font-size="7.5">bracketInnerX — INVARIANT (render = CSG = camera)</text>
+
+  </g>
+
+
+  <!-- ── Legend / footer ── -->
+  <rect x="8" y="771" width="1184" height="42" rx="3" fill="#1a2035" stroke="#333"/>
+  <text x="24" y="786" font-size="8.5" font-weight="bold" fill="#7ecfff">IMPLEMENTATION:  </text>
+  <text x="152" y="786" font-size="8" fill="#ccc">presets.ts: TIER2_H_FRAC absorbs tier3 · bracketInnerX / pillarFaceWidth / bracketPillarCenterY unchanged</text>
+  <text x="24"  y="800" font-size="8.5" font-weight="bold" fill="#7ecfff">RENDER:  </text>
+  <text x="92"  y="800" font-size="8" fill="#ccc">ViseModel: 2× Box (tier1+tier2) · L-bracket foot+pillar · seating step · 4 SHCS circles on pillar top face · 3 FaceHole on tier-1 ±Z  </text>
+  <text x="24"  y="814" font-size="8.5" font-weight="bold" fill="#f39c12">INVARIANT:  </text>
+  <text x="108" y="814" font-size="8" fill="#ccc">xOffset = bracketInnerX(cfg) − thickness/2   must be identical in  JawBlankMesh · useJawProfile · CameraController</text>
+
+</svg>

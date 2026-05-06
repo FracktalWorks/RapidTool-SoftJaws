@@ -17,6 +17,7 @@ import { PositionControl, RotationControl } from '@rapidtool/cad-ui';
 import type { Position3D, Rotation3D } from '@rapidtool/cad-ui';
 import { Box, CircleDot, Cog, FileBox, Grip, Settings, Trash2, Wrench } from 'lucide-react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import type { ProcessedPart } from '@/stores/types';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -194,19 +195,24 @@ export function PropertiesPanel() {
     activePart,
     setActivePart,
     removePart,
-    viseConfig,
     jawBlank,
     jawProfile,
     gripFeatures,
     mountingHoles,
   } = useSoftJawsStore();
+  const viseConfig = useViseStore((s) => s.viseConfig);
 
   const { openSection, setOpenSection } = useAccordionSection();
 
-  if (parts.length === 0) return <EmptyState />;
+  if (parts.length === 0) return (
+    <div className="tech-glass h-full overflow-auto flex flex-col">
+      <EmptyState />
+    </div>
+  );
 
   return (
-    <Accordion
+    <div className="tech-glass h-full overflow-auto flex flex-col">
+      <Accordion
       type="single"
       collapsible
       value={openSection}
@@ -331,5 +337,6 @@ export function PropertiesPanel() {
         </AccordionContent>
       </AccordionItem>
     </Accordion>
+    </div>
   );
 }

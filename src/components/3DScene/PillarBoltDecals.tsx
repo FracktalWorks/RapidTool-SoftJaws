@@ -19,9 +19,11 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import {
   bracketInnerX,
-  bracketFootLen,
+  viseBodyLen,
+  VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
 
@@ -64,7 +66,7 @@ function ExitHole({
 }
 
 export function PillarBoltDecals() {
-  const viseConfig    = useSoftJawsStore((s) => s.viseConfig);
+  const viseConfig    = useViseStore((s) => s.viseConfig);
   const jawBlank      = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles = useSoftJawsStore((s) => s.mountingHoles);
   const holesReady    = useSoftJawsStore((s) => s.mountingHoles.generated);
@@ -74,8 +76,9 @@ export function PillarBoltDecals() {
 
     const { left, right } = computeMountingHolePositions(viseConfig, jawBlank, mountingHoles);
 
-    // Outer X face of each end-stop = inner face + stop length.
-    const pillarOuterRight = bracketInnerX(viseConfig) + bracketFootLen(viseConfig);
+    // Pillar outer X = inner face + pillar X thickness (BR_PILLAR_LEN_FRAC × bodyLen).
+    const pillarOuterRight =
+      bracketInnerX(viseConfig) + viseBodyLen(viseConfig) * VISE_GEOMETRY.BR_PILLAR_LEN_FRAC;
 
     const throughR = mountingHoles.boltSize / 2 + HOLE_CLEARANCE;
 
