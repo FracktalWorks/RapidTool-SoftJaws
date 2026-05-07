@@ -156,20 +156,23 @@ export function ViseModel() {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
   });
+  const activePartTransformX = useSoftJawsStore((s) => {
+    const id = s.activePart;
+    return id ? (s.parts.find((p) => p.id === id)?.transform.position.x ?? 0) : 0;
+  });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
-  // Adaptive inner-face X — L-brackets slide inward to clamp the part, matching
-  // the jaw blank position exactly (same formula as JawBlankMesh / useJawProfile).
-  const adaptiveInnerX = useMemo(() => {
+  // Left L-bracket is ALWAYS fixed.
+  // Right L-bracket slides to clamp against the rightmost edge of the part.
+  const leftInnerX = bracketInnerX(viseConfig);
+  const rightInnerX = useMemo(() => {
     const fixedInnerX = bracketInnerX(viseConfig);
     if (!activePartBbox) return fixedInnerX;
-    const partHalfX    = (activePartBbox.max[0] - activePartBbox.min[0]) / 2;
-    const adaptiveXOff = Math.min(
-      fixedInnerX - jawBlank.thickness / 2,
-      partHalfX + clampGap + jawBlank.thickness / 2,
+    return Math.min(
+      fixedInnerX,
+      activePartTransformX + activePartBbox.max[0] + clampGap + jawBlank.thickness
     );
-    return adaptiveXOff + jawBlank.thickness / 2;
-  }, [viseConfig, jawBlank, activePartBbox, clampGap]);
+  }, [viseConfig, jawBlank, activePartBbox, activePartTransformX, clampGap]);
 
   // Pillar face tapped-hole positions — same layout as jaw counterbores.
   const pillarHoles = useMemo(
@@ -235,12 +238,14 @@ export function ViseModel() {
         metalness={0.72}
       />
 
-      {/* ── L-brackets × 2 (±X ends) ─────────────────────────────── */}
+      {/* ── L-brackets × 2 (Left Fixed, Right Movable) ────────────────── */}
       {([-1, 1] as const).map((sign) => {
-        // L-bracket slides with the jaw blank — inner face tracks adaptiveInnerX.
-        const innerFaceX = sign * adaptiveInnerX;
-        const pillarCX   = sign * (adaptiveInnerX + d.brPillarLen / 2);
-        const footCX     = sign * (adaptiveInnerX + d.brFootLen  / 2);
+        const innerFaceXAbs = sign === -1 ? leftInnerX : rightInnerX;
+        
+        // Foot and pillar sit flush on their inner face (abuts the jaw blank)
+        const innerFaceX = sign * innerFaceXAbs;
+        const pillarCX   = sign * (innerFaceXAbs + d.brPillarLen / 2);
+        const footCX     = sign * (innerFaceXAbs + d.brFootLen  / 2);
 
         // 45° chamfer at the top-inner pillar edge — deburred machined finish.
         const chamferCX = innerFaceX + sign * (CHAMFER_C / 2);

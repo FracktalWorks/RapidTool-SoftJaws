@@ -24,7 +24,7 @@ import type { TransformData } from '@rapidtool/cad-ui';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
-import { jawBaseH } from '@/features/vise-config/data/presets';
+import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -58,6 +58,9 @@ function PartMesh({
   const meshRef = useRef<THREE.Mesh>(null);
   const geomData = geometryCache.get(part.id);
   const updatePartTransform = useSoftJawsStore((s) => s.updatePartTransform);
+  const clampGap = useSoftJawsStore((s) => s.clampGap);
+  const jawBlankThickness = useSoftJawsStore((s) => s.jawBlank.thickness);
+  const viseConfig = useViseStore((s) => s.viseConfig);
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
   // While true, useLayoutEffect must NOT re-apply store values.
@@ -90,16 +93,23 @@ function PartMesh({
   // Y where part bottom touches the jaw rail surface
   const baseY = jawBaseH(viseJawHeight) + partHeight / 2;
 
+  // X position mathematically locked so the part's left edge touches the left fixed jaw
+  const snapX = useMemo(() => {
+    const leftInnerX = bracketInnerX(viseConfig);
+    const jawFaceX = -leftInnerX + jawBlankThickness; // The fixed jaw's inner clamping face
+    return jawFaceX + clampGap - part.boundingBox.min[0];
+  }, [viseConfig, jawBlankThickness, clampGap, part.boundingBox]);
+
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {
     if (!meshRef.current || gizmoActive) return;
-    meshRef.current.position.set(pos.x, baseY + pos.y, pos.z);
+    meshRef.current.position.set(snapX, baseY + pos.y, pos.z);
     meshRef.current.rotation.set(
       rot.x * DEG2RAD,
       rot.y * DEG2RAD,
       rot.z * DEG2RAD,
     );
-  }, [pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, baseY, gizmoActive]);
+  }, [snapX, pos.y, pos.z, rot.x, rot.y, rot.z, baseY, gizmoActive]);
 
   // ── Click: select part + show gizmo ──────────────────────────────────────
   const handleClick = useCallback(
@@ -135,7 +145,7 @@ function PartMesh({
     ({ position: worldPos, rotation: worldRot }: TransformData) => {
       updatePartTransform(part.id, {
         position: {
-          x: worldPos.x,
+          x: snapX, // X is mathematically locked to the fixed jaw, ignore gizmo drag
           y: worldPos.y - baseY, // strip rail offset — store holds delta only
           z: worldPos.z,
         },
