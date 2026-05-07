@@ -4,14 +4,14 @@ import { useExport } from '../hooks/useExport';
 
 export function ExportStepContent() {
   const { exportConfig, updateExportConfig } = useSoftJawsStore();
-  const { status, error, exportJaw } = useExport();
+  const { status, error, exportJaws } = useExport();
 
   const isRunning = status === 'running';
 
   return (
     <div className="flex flex-col gap-4 p-3">
       <p className="text-xs text-muted-foreground font-tech tracking-wide">
-        Choose export format and quality, then download the soft jaw file.
+        Downloads two STL files — SoftJaw-Left and SoftJaw-Right — ready for CNC machining.
       </p>
 
       {/* ── Format ────────────────────────────────────────────────── */}
@@ -74,14 +74,14 @@ export function ExportStepContent() {
       {status === 'success' && (
         <div className="flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-600 dark:text-green-400">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          <span>File downloaded successfully.</span>
+          <span>2 files downloaded — SoftJaw-Left.stl &amp; SoftJaw-Right.stl</span>
         </div>
       )}
 
       {/* ── Download button ───────────────────────────────────────── */}
       <button
         type="button"
-        onClick={exportJaw}
+        onClick={exportJaws}
         disabled={isRunning}
         className="mt-1 flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       >
@@ -93,7 +93,7 @@ export function ExportStepContent() {
         ) : (
           <>
             <Download className="h-3.5 w-3.5" />
-            Download .{exportConfig.format.toUpperCase()}
+            Download 2× .{exportConfig.format.toUpperCase()}
           </>
         )}
       </button>

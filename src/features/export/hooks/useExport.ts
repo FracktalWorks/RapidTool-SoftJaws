@@ -1,66 +1,69 @@
 /**
- * useExport — Triggers a browser download of the final jaw design.
+ * useExport — Downloads the final jaw pair as two STL files.
  *
- * Export priority:
- *   1. If the jaw profile has been generated → export the CSG result geometry
- *      (jaw blank with cavity) from geometryCache.
- *   2. Otherwise → export the jaw blank box geometry as raw stock.
+ * Cache key priority per side (falls back down the chain):
+ *   JAW_HOLED_*   — profile pocket + mounting holes drilled  (best)
+ *   JAW_PROFILE_* — profile pocket only, no holes
+ *   raw blank box — nothing generated yet (fallback)
  *
- * STL is fully supported via cad-core's meshToSTL + downloadFile.
- * 3MF export is not yet implemented in cad-core and returns an error message.
+ * Geometry stored under JAW_HOLED_* and JAW_PROFILE_* is already baked
+ * to world-space coordinates by the CSG pipeline, so the mesh must have
+ * an identity transform (no extra position applied).
  */
 
 import { useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { meshToSTL, downloadFile } from '@rapidtool/cad-core';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
-import { geometryCache, JAW_PROFILE_CACHE_KEY } from '@/stores/geometryCache';
+import {
+  geometryCache,
+  JAW_HOLED_CACHE_KEY_LEFT,
+  JAW_HOLED_CACHE_KEY_RIGHT,
+  JAW_PROFILE_CACHE_KEY_LEFT,
+  JAW_PROFILE_CACHE_KEY_RIGHT,
+  type CachedGeometry,
+} from '@/stores/geometryCache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ExportStatus = 'idle' | 'running' | 'success' | 'error';
 
 export interface UseExportReturn {
-  status: ExportStatus;
-  error: string | null;
-  exportJaw: () => void;
+  status:     ExportStatus;
+  error:      string | null;
+  exportJaws: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Builds a THREE.Mesh from the jaw profile CSG result in the geometry cache. */
-function buildProfileMesh(jawHeight: number): THREE.Mesh | null {
-  const cached = geometryCache.get(JAW_PROFILE_CACHE_KEY);
-  if (!cached) return null;
-
+// Geometry is already in world space — mesh stays at origin so STLExporter
+// does not apply an extra matrixWorld offset.
+function cachedToMesh(cached: CachedGeometry): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(cached.positions.slice(), 3));
   geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals.slice(),   3));
-
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
-  mesh.position.set(0, jawHeight / 2, 0);
-  mesh.updateMatrixWorld(true);
-  return mesh;
+  if (cached.indices) {
+    geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
+  }
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
 }
 
-/** Builds a THREE.Mesh for the raw jaw blank box. */
-function buildBlankMesh(width: number, height: number, depth: number): THREE.Mesh {
-  const geo  = new THREE.BoxGeometry(width, height, depth);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
-  mesh.position.set(0, height / 2, 0);
-  mesh.updateMatrixWorld(true);
-  return mesh;
+// Raw stock blank centered at origin — used as last-resort fallback.
+function buildBlankMesh(thickness: number, height: number, face: number): THREE.Mesh {
+  const geo = new THREE.BoxGeometry(thickness, height, face);
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial());
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useExport(): UseExportReturn {
   const [status, setStatus] = useState<ExportStatus>('idle');
-  const [error, setError]   = useState<string | null>(null);
+  const [error,  setError]  = useState<string | null>(null);
 
-  const { jawBlank, jawProfile, exportConfig } = useSoftJawsStore();
+  const jawBlank    = useSoftJawsStore((s) => s.jawBlank);
+  const exportConfig = useSoftJawsStore((s) => s.exportConfig);
 
-  const exportJaw = useCallback(() => {
+  const exportJaws = useCallback(() => {
     if (exportConfig.format === '3mf') {
       setError('3MF export is not yet implemented. Please select STL.');
       return;
@@ -69,23 +72,23 @@ export function useExport(): UseExportReturn {
     setStatus('running');
     setError(null);
 
-    // Defer so the "running" state renders before the synchronous STL work
+    // Defer so "running" state renders before the synchronous STL work.
     setTimeout(() => {
       try {
-        // Prefer the generated profile; fall back to the raw blank
-        const mesh = jawProfile.generated
-          ? buildProfileMesh(jawBlank.height)
-          : null;
+        const sides = [
+          { label: 'Left',  holedKey: JAW_HOLED_CACHE_KEY_LEFT,  profileKey: JAW_PROFILE_CACHE_KEY_LEFT  },
+          { label: 'Right', holedKey: JAW_HOLED_CACHE_KEY_RIGHT, profileKey: JAW_PROFILE_CACHE_KEY_RIGHT },
+        ] as const;
 
-        const exportMesh = mesh ?? buildBlankMesh(
-          jawBlank.face,       // Z face
-          jawBlank.height,     // Y
-          jawBlank.thickness,  // X thickness
-        );
+        for (const { label, holedKey, profileKey } of sides) {
+          const cached = geometryCache.get(holedKey) ?? geometryCache.get(profileKey);
+          const mesh   = cached
+            ? cachedToMesh(cached)
+            : buildBlankMesh(jawBlank.thickness, jawBlank.height, jawBlank.face);
 
-        const stlData = meshToSTL(exportMesh, { binary: true });
-        const filename = `SoftJaw_RapidTool.stl`;
-        downloadFile(stlData, filename, 'application/sla');
+          const stlData = meshToSTL(mesh, { binary: true });
+          downloadFile(stlData, `SoftJaw-${label}.stl`, 'application/sla');
+        }
 
         setStatus('success');
       } catch (err) {
@@ -95,7 +98,7 @@ export function useExport(): UseExportReturn {
         setStatus('error');
       }
     }, 0);
-  }, [jawBlank, jawProfile, exportConfig]);
+  }, [jawBlank, exportConfig]);
 
-  return { status, error, exportJaw };
+  return { status, error, exportJaws };
 }
