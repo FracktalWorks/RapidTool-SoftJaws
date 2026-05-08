@@ -156,23 +156,23 @@ export function ViseModel() {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
   });
-  const activePartTransformX = useSoftJawsStore((s) => {
-    const id = s.activePart;
-    return id ? (s.parts.find((p) => p.id === id)?.transform.position.x ?? 0) : 0;
-  });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
   // Left L-bracket is ALWAYS fixed.
-  // Right L-bracket slides to clamp against the rightmost edge of the part.
+  // Right L-bracket tracks the actual world-space right edge of the centered part geometry.
+  // Part geometry is centered by PartMeshes (local X: -w/2 to +w/2).
+  // snapX = leftFaceX + clampGap + partWidth/2   (same as PartMeshes formula)
+  // partRightEdge = snapX + partWidth/2
   const leftInnerX = bracketInnerX(viseConfig);
   const rightInnerX = useMemo(() => {
     const fixedInnerX = bracketInnerX(viseConfig);
     if (!activePartBbox) return fixedInnerX;
-    return Math.min(
-      fixedInnerX,
-      activePartTransformX + activePartBbox.max[0] + clampGap + jawBlank.thickness
-    );
-  }, [viseConfig, jawBlank, activePartBbox, activePartTransformX, clampGap]);
+    const partWidth     = activePartBbox.max[0] - activePartBbox.min[0];
+    const leftFaceX     = -fixedInnerX + jawBlank.thickness; // inner face of fixed left jaw blank
+    const partSnapX     = leftFaceX + clampGap + partWidth / 2;
+    const partRightEdge = partSnapX + partWidth / 2;
+    return Math.min(fixedInnerX, partRightEdge + clampGap + jawBlank.thickness);
+  }, [viseConfig, jawBlank.thickness, activePartBbox, clampGap]);
 
   // Pillar face tapped-hole positions — same layout as jaw counterbores.
   const pillarHoles = useMemo(

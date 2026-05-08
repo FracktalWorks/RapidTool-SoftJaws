@@ -5,8 +5,7 @@
  * so downstream steps (jaw-blank, jaw-profile) always start from sensible values.
  */
 
-import { Info, ChevronDown, Factory, AlertTriangle } from 'lucide-react';
-import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { Info, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useViseStore } from '@/stores/viseStore';
 import type { ViseType } from '@/stores/types';
 import { VISE_PRESETS, PRESET_LIST } from '../data/visePresets';
@@ -24,24 +23,20 @@ const FIELDS: DimField[] = ['jawWidth', 'jawHeight', 'jawStroke'];
 const CHUCK_TYPES = new Set<ViseType>(['three-jaw-chuck', 'four-jaw-chuck', 'six-jaw-chuck']);
 
 export function ViseConfigStepContent() {
-  const { updateJawBlank } = useSoftJawsStore();
   const { viseConfig, updateViseConfig } = useViseStore();
 
   const currentPreset = VISE_PRESETS[viseConfig.type];
   const isChuck = CHUCK_TYPES.has(viseConfig.type);
 
-  /** Apply a preset — snap all dims + reset jaw blank to match */
+  /** Apply a preset — snaps all vise dims only. Jaw blank is independent. */
   const handlePresetSelect = (type: ViseType) => {
     const preset = VISE_PRESETS[type];
     updateViseConfig({ type, ...preset.config });
-    updateJawBlank({ face: preset.config.jawWidth, height: preset.config.jawHeight });
   };
 
-  /** Manual dim tweak — also keeps jaw blank in sync */
+  /** Manual dim tweak — vise config only, jaw blank is independent. */
   const handleDimChange = (field: DimField, value: number) => {
     updateViseConfig({ [field]: value });
-    if (field === 'jawWidth') updateJawBlank({ face: value });
-    if (field === 'jawHeight') updateJawBlank({ height: value });
   };
 
   return (

@@ -93,11 +93,14 @@ function PartMesh({
   // Y where part bottom touches the jaw rail surface
   const baseY = jawBaseH(viseJawHeight) + partHeight / 2;
 
-  // X position mathematically locked so the part's left edge touches the left fixed jaw
+  // X position: left edge of the centered geometry must touch the fixed left jaw's clamping face.
+  // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
+  // We must use the WIDTH (delta), NOT bbox.min[0] which is the original file coordinate.
   const snapX = useMemo(() => {
-    const leftInnerX = bracketInnerX(viseConfig);
-    const jawFaceX = -leftInnerX + jawBlankThickness; // The fixed jaw's inner clamping face
-    return jawFaceX + clampGap - part.boundingBox.min[0];
+    const leftInnerX  = bracketInnerX(viseConfig);
+    const leftFaceX   = -leftInnerX + jawBlankThickness; // inner clamping face of the fixed left jaw
+    const partWidth   = part.boundingBox.max[0] - part.boundingBox.min[0];
+    return leftFaceX + clampGap + partWidth / 2;
   }, [viseConfig, jawBlankThickness, clampGap, part.boundingBox]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─

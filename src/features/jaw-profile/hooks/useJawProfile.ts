@@ -116,14 +116,25 @@ export function useJawProfile(): UseJawProfileReturn {
     // overhangs the platform (mirrors JawBlankMesh render).
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
-    const fixedXOff    = innerX - jawBlank.thickness / 2;
-    const bbox         = part.boundingBox;
-    const adaptiveXOff = Math.min(
-      fixedXOff,
-      (bbox.max[0] - bbox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
-    );
+    const fixedXOff  = innerX - jawBlank.thickness / 2;
+    const bbox       = part.boundingBox;
     const blankY     = baseH + jawBlank.height / 2;
     const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
+
+    // ── Jaw blank X positions (must exactly match JawBlankMesh render) ───────
+    // Part geometry is centered (local X: -partWidth/2 to +partWidth/2).
+    // partWidth = bbox delta (NOT bbox.max, which is the original file coordinate).
+    const partWidth     = bbox.max[0] - bbox.min[0];
+    const leftFaceX     = -innerX + jawBlank.thickness;      // inner face of fixed left jaw blank
+    const partSnapX     = leftFaceX + clampGap + partWidth / 2; // part center in world space
+    const partRightEdge = partSnapX + partWidth / 2;
+
+    // Left blank: bolted to the fixed left jaw — never moves.
+    const leftXCenter  = -(fixedXOff);
+
+    // Right blank: slides to clamp the right side of the part.
+    const rightXOffset = Math.min(fixedXOff, partRightEdge + clampGap + jawBlank.thickness / 2);
+    const rightXCenter = rightXOffset;
 
     // ── Build left & right blanks, bake world transform into geometry ───────
     const buildBakedGeo = (xCenter: number) => {
@@ -139,9 +150,8 @@ export function useJawProfile(): UseJawProfileReturn {
       return geo;
     };
 
-    // Both blanks symmetric — jaw pair closes around the part from both sides.
-    const leftGeo  = buildBakedGeo(-adaptiveXOff);
-    const rightGeo = buildBakedGeo(+adaptiveXOff);
+    const leftGeo  = buildBakedGeo(leftXCenter);
+    const rightGeo = buildBakedGeo(rightXCenter);
 
     const makePayload = (
       geo: THREE.BufferGeometry,

@@ -110,11 +110,6 @@ export function JawBlankMesh() {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
   });
-  // Also read transform so jaws re-close when part is moved with gizmo
-  const activePartTransformX = useSoftJawsStore((s) => {
-    const id = s.activePart;
-    return id ? (s.parts.find((p) => p.id === id)?.transform.position.x ?? 0) : 0;
-  });
   const { face, height, thickness, material } = jawBlank;
 
   const { centerY, leftXOff, rightXOff, boltDia, boltZs, holesY, renderFace, labelSize } = useMemo(() => {
@@ -136,18 +131,25 @@ export function JawBlankMesh() {
     const boltR   = Math.min(thickness * 0.28, rFace * 0.15) * 0.90; // approx bolt radius
     const yCenter = Math.min(Math.max(rawY, baseY + boltR * 2), jawTopY - boltR * 2);
 
-    // Left Jaw is ALWAYS fixed (this is a standard milling vise).
+    // Left Jaw is ALWAYS fixed (standard milling vise).
     const fixedXOff = innerX - thickness / 2;
-    const leftXOff = fixedXOff;
+    const leftXOff  = fixedXOff;
 
-    // Right Jaw slides to clamp against the rightmost edge of the part.
-    // partRightEdge = transformX + bbox.max[0]
-    // We want the jaw's inner face to sit at partRightEdge + clampGap
+    // Right Jaw tracks the actual world-space right edge of the part.
+    // The part geometry is centered by PartMeshes (local X: -w/2 to +w/2), so
+    // the world-space part center (snapX) and right edge are:
+    //   snapX         = leftJawFaceX + clampGap + partWidth/2
+    //   partRightEdge = snapX + partWidth/2
+    // We derive this purely from viseConfig + bbox — NOT from the stored transform,
+    // which is only set on gizmo drag and starts at 0 on first load.
     const rightXOff = activePartBbox
-      ? Math.min(
-          fixedXOff,
-          activePartTransformX + activePartBbox.max[0] + clampGap + thickness / 2
-        )
+      ? (() => {
+          const partWidth    = activePartBbox.max[0] - activePartBbox.min[0];
+          const leftFaceX    = -innerX + thickness;           // inner clamping face of fixed left jaw
+          const partSnapX    = leftFaceX + clampGap + partWidth / 2;
+          const partRightEdge = partSnapX + partWidth / 2;
+          return Math.min(fixedXOff, partRightEdge + clampGap + thickness / 2);
+        })()
       : fixedXOff;
 
     return {
@@ -160,7 +162,7 @@ export function JawBlankMesh() {
       renderFace: rFace,
       labelSize:  height * 0.09,
     };
-  }, [viseConfig, jawBlank, mountingHoles, face, height, thickness, activePartBbox, activePartTransformX, clampGap]);
+  }, [viseConfig, jawBlank, mountingHoles, face, height, thickness, activePartBbox, clampGap]);
 
   const color = MATERIAL_COLORS[material] ?? DEFAULT_BLANK_COLOR;
 
