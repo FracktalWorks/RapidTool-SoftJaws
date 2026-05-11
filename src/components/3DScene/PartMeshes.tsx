@@ -25,6 +25,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
+import { computeWorldSpanX } from '@/utils/partGeometry';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -97,11 +98,11 @@ function PartMesh({
   // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
   // We must use the WIDTH (delta), NOT bbox.min[0] which is the original file coordinate.
   const snapX = useMemo(() => {
-    const leftInnerX  = bracketInnerX(viseConfig);
-    const leftFaceX   = -leftInnerX + jawBlankThickness; // inner clamping face of the fixed left jaw
-    const partWidth   = part.boundingBox.max[0] - part.boundingBox.min[0];
-    return leftFaceX + clampGap + partWidth / 2;
-  }, [viseConfig, jawBlankThickness, clampGap, part.boundingBox]);
+    const leftInnerX = bracketInnerX(viseConfig);
+    const leftFaceX  = -leftInnerX + jawBlankThickness;
+    const worldWidth = computeWorldSpanX(part);
+    return leftFaceX + clampGap + worldWidth / 2;
+  }, [viseConfig, jawBlankThickness, clampGap, part]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {

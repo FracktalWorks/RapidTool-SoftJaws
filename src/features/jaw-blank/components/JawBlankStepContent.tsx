@@ -20,12 +20,15 @@ import { Ruler, Info } from 'lucide-react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { pillarFaceWidth } from '@/features/vise-config/data/presets';
+import { AXIS_TEXT_CLASS, type Axis } from '@/utils/axisColors';
+import { useDimensionHoverStore } from '@/stores/dimensionHover';
 
 type DimField = 'thickness' | 'face' | 'height';
 
 const DIMS: {
   field: DimField;
   label: string;
+  axis: Axis;
   trinckleLabel: string;
   hint: string;
   min: number;
@@ -34,6 +37,7 @@ const DIMS: {
   {
     field: 'thickness',
     label: 'Length (X)',
+    axis: 'x',
     trinckleLabel: 'Jaw reach from carriage',
     hint: 'How far the jaw blank sticks out from the L-bracket toward the part.',
     min: 5,
@@ -42,6 +46,7 @@ const DIMS: {
   {
     field: 'face',
     label: 'Width (Y)',
+    axis: 'y',
     trinckleLabel: 'Jaw face width',
     hint: 'Width of the jaw contact face. Capped by the vise L-bracket width.',
     min: 10,
@@ -50,6 +55,7 @@ const DIMS: {
   {
     field: 'height',
     label: 'Height (Z)',
+    axis: 'z',
     trinckleLabel: 'Jaw stock height',
     hint: 'Vertical height of the blank. Must be tall enough to contain the bolt pattern.',
     min: 10,
@@ -60,6 +66,8 @@ const DIMS: {
 export function JawBlankStepContent() {
   const { jawBlank, updateJawBlank, clampGap } = useSoftJawsStore();
   const viseConfig = useViseStore((s) => s.viseConfig);
+  const setHovered = useDimensionHoverStore((s) => s.setHovered);
+  const clearHover = useDimensionHoverStore((s) => s.clear);
 
   // Active part bounding box for derived read-only values
   const activePartBbox = useSoftJawsStore((s) => {
@@ -140,13 +148,19 @@ export function JawBlankStepContent() {
         )}
 
         <div className="grid gap-3">
-          {DIMS.map(({ field, label, trinckleLabel, hint, min, max }) => {
+          {DIMS.map(({ field, label, axis, trinckleLabel, hint, min, max }) => {
             const isMaxed = field === 'face' && faceOverhang;
+            const handleEnter = () => setHovered({ scope: 'jaw', field });
             return (
-              <label key={field} className="flex flex-col gap-1.5 group">
+              <label
+                key={field}
+                className="flex flex-col gap-1.5 group"
+                onMouseEnter={handleEnter}
+                onMouseLeave={clearHover}
+              >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-medium text-foreground">{label}</span>
+                    <span className={`text-xs font-medium ${AXIS_TEXT_CLASS[axis]}`}>{label}</span>
                     <span className="ml-2 text-[9px] text-muted-foreground/60 font-tech">{trinckleLabel}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -157,7 +171,9 @@ export function JawBlankStepContent() {
                       step={0.5}
                       value={jawBlank[field]}
                       onChange={(e) => updateJawBlank({ [field]: parseFloat(e.target.value) || 0 })}
-                      className={`w-20 rounded border px-2 py-1 text-right text-xs font-tech outline-none tech-transition hover:bg-background focus:ring-1 focus:ring-primary/40 ${isMaxed ? 'border-amber-500/50 bg-amber-500/5' : 'border-input/60 bg-background/50'}`}
+                      onFocus={handleEnter}
+                      onBlur={clearHover}
+                      className={`w-28 rounded border px-2 py-1 text-right text-xs font-tech outline-none tech-transition hover:bg-background focus:ring-1 focus:ring-primary/40 ${isMaxed ? 'border-amber-500/50 bg-amber-500/5' : 'border-input/60 bg-background/50'}`}
                     />
                     <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
                   </div>

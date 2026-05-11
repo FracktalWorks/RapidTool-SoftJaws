@@ -7,36 +7,60 @@
 
 import { Info, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useViseStore } from '@/stores/viseStore';
+import { useSoftJawsStore } from '@/stores/softJawsStore';
 import type { ViseType } from '@/stores/types';
 import { VISE_PRESETS, PRESET_LIST } from '../data/visePresets';
+import { AXIS_TEXT_CLASS, type Axis } from '@/utils/axisColors';
+import { useDimensionHoverStore } from '@/stores/dimensionHover';
 
 type DimField = 'jawWidth' | 'jawHeight' | 'jawStroke';
 
-const FIELD_LABELS: Record<DimField, string> = {
-  jawWidth: 'Jaw width',
-  jawHeight: 'Jaw height',
-  jawStroke: 'Max stroke',
+interface FieldSpec {
+  label: string;
+  axis:  Axis;     // Trinckle convention — drives colour + 3D arrow direction
+  min:   number;
+  max:   number;
+  step:  number;
+}
+
+const FIELD_SPECS: Record<DimField, FieldSpec> = {
+  jawStroke: { label: 'Max stroke',  axis: 'x', min: 100, max: 300, step: 10 },
+  jawWidth:  { label: 'Vise width',  axis: 'y', min:  50, max: 200, step:  5 },
+  jawHeight: { label: 'Vise height', axis: 'z', min:  50, max: 200, step:  5 },
 };
 
-const FIELDS: DimField[] = ['jawWidth', 'jawHeight', 'jawStroke'];
+// Render order: X → Y → Z (Trinckle / CAD convention).
+const FIELDS: DimField[] = ['jawStroke', 'jawWidth', 'jawHeight'];
 
 const CHUCK_TYPES = new Set<ViseType>(['three-jaw-chuck', 'four-jaw-chuck', 'six-jaw-chuck']);
 
 export function ViseConfigStepContent() {
   const { viseConfig, updateViseConfig } = useViseStore();
+  const updateMountingHoles = useSoftJawsStore((s) => s.updateMountingHoles);
+  const setHovered = useDimensionHoverStore((s) => s.setHovered);
+  const clearHover = useDimensionHoverStore((s) => s.clear);
 
   const currentPreset = VISE_PRESETS[viseConfig.type];
   const isChuck = CHUCK_TYPES.has(viseConfig.type);
 
-  /** Apply a preset — snaps all vise dims only. Jaw blank is independent. */
+  /**
+   * Apply a preset — snaps vise dims AND seeds the mounting-hole spacing from
+   * the preset's tSlotSpacing so the bolt pattern matches the physical vise.
+   * Jaw blank dimensions stay independent (separate stock).
+   */
   const handlePresetSelect = (type: ViseType) => {
     const preset = VISE_PRESETS[type];
     updateViseConfig({ type, ...preset.config });
+    if (preset.config.tSlotSpacing != null) {
+      updateMountingHoles({ spacing: preset.config.tSlotSpacing });
+    }
   };
 
-  /** Manual dim tweak — vise config only, jaw blank is independent. */
+  /** Manual dim tweak — clamps to the field's min/max so the vise stays valid. */
   const handleDimChange = (field: DimField, value: number) => {
-    updateViseConfig({ [field]: value });
+    const { min, max } = FIELD_SPECS[field];
+    const clamped = Math.max(min, Math.min(max, value));
+    updateViseConfig({ [field]: clamped });
   };
 
   return (
@@ -57,6 +81,7 @@ export function ViseConfigStepContent() {
         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Workholding Type</p>
         <div className="relative">
           <select
+            aria-label="Workholding type"
             value={viseConfig.type}
             onChange={(e) => handlePresetSelect(e.target.value as ViseType)}
             className="w-full appearance-none rounded-md border border-input bg-background/80 px-3 py-2 pr-8 text-sm font-tech focus:ring-2 focus:ring-primary/20 outline-none tech-transition hover:bg-background cursor-pointer"
@@ -90,29 +115,49 @@ export function ViseConfigStepContent() {
         </p>
         
         {/* Helper Explanations Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-border/40">
+        <div className="grid grid-cols-3 gap-3 mb-3 pb-3 border-b border-border/40">
            <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
-             <span className="text-primary/70 font-semibold block mb-0.5">Width / Stroke:</span>
-             L-bracket width and max opening capacity of the cast-iron bed.
+             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.x}`}>Max stroke (X):</span>
+             Gap between L-bracket inner faces.
            </div>
            <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
-             <span className="text-primary/70 font-semibold block mb-0.5">Height:</span>
-             Base-to-rail height. Dictates where the workpiece bed sits relative to the table.
+             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.y}`}>Vise width (Y):</span>
+             Body / jaw-face depth along Y.
+           </div>
+           <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
+             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.z}`}>Vise height (Z):</span>
+             Base-to-rail vertical extent.
            </div>
         </div>
 
         <div className="grid gap-2.5">
           {FIELDS.map((field) => {
-            const label = FIELD_LABELS[field];
+            const { label, axis, min, max, step } = FIELD_SPECS[field];
+            const handleEnter = () => setHovered({ scope: 'vise', field });
             return (
-              <label key={field} className="flex items-center justify-between group">
-                <span className="text-xs text-muted-foreground group-hover:text-foreground tech-transition">{label}</span>
+              <label
+                key={field}
+                className="flex items-center justify-between group"
+                onMouseEnter={handleEnter}
+                onMouseLeave={clearHover}
+              >
+                <span className={`text-xs font-medium tech-transition ${AXIS_TEXT_CLASS[axis]}`}>
+                  {label} ({axis.toUpperCase()})
+                  <span className="ml-1.5 text-[9px] text-muted-foreground/50 font-tech font-normal">
+                    {min}–{max}
+                  </span>
+                </span>
                 <div className="flex items-center gap-1.5">
                   <input
                     type="number"
+                    min={min}
+                    max={max}
+                    step={step}
                     value={viseConfig[field] ?? ''}
                     onChange={(e) => handleDimChange(field, parseFloat(e.target.value) || 0)}
-                    className="w-20 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech focus:ring-1 focus:ring-primary/40 outline-none tech-transition hover:bg-background"
+                    onFocus={handleEnter}
+                    onBlur={clearHover}
+                    className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech focus:ring-1 focus:ring-primary/40 outline-none tech-transition hover:bg-background"
                   />
                   <span className="text-[10px] text-muted-foreground/60 font-tech w-4">
                     mm

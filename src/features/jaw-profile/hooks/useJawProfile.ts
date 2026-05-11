@@ -27,6 +27,7 @@ import {
   bracketInnerX,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
+import { computeWorldSpanX } from '@/utils/partGeometry';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -117,17 +118,15 @@ export function useJawProfile(): UseJawProfileReturn {
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
     const fixedXOff  = innerX - jawBlank.thickness / 2;
-    const bbox       = part.boundingBox;
     const blankY     = baseH + jawBlank.height / 2;
     const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
 
     // ── Jaw blank X positions (must exactly match JawBlankMesh render) ───────
-    // Part geometry is centered (local X: -partWidth/2 to +partWidth/2).
-    // partWidth = bbox delta (NOT bbox.max, which is the original file coordinate).
-    const partWidth     = bbox.max[0] - bbox.min[0];
-    const leftFaceX     = -innerX + jawBlank.thickness;      // inner face of fixed left jaw blank
-    const partSnapX     = leftFaceX + clampGap + partWidth / 2; // part center in world space
-    const partRightEdge = partSnapX + partWidth / 2;
+    // Use rotation-aware world span so a rotated part (e.g. 90° Y) correctly
+    // widens the right jaw to match its new effective clamping width.
+    const worldWidth    = computeWorldSpanX(part);
+    const leftFaceX     = -innerX + jawBlank.thickness;
+    const partRightEdge = leftFaceX + clampGap + worldWidth;
 
     // Left blank: bolted to the fixed left jaw — never moves.
     const leftXCenter  = -(fixedXOff);

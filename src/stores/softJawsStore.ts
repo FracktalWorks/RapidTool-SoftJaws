@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { geometryCache } from './geometryCache';
 import type {
   SoftJawsState,
   ProcessedPart,
@@ -39,7 +40,10 @@ const INITIAL_STATE: SoftJawsState = {
   mountingHoles: {
     pattern: 'standard',
     boltSize: 8,
-    spacing: 50,
+    // Default matches the initial vise's tSlotSpacing (125 mm — Kurt-style
+    // 6" CNC vise). Updated automatically when a vise preset is applied;
+    // see ViseConfigStepContent.handlePresetSelect.
+    spacing: 125,
     count: 2,
     generated: false,
   },
@@ -69,23 +73,35 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
     immer((set) => ({
       ...INITIAL_STATE,
 
+      // Any change to a CSG input invalidates the cached profile — the baked
+      // world-space mesh in geometryCache (JAW_PROFILE_*) was built against
+      // the OLD state and no longer matches what the user sees. Leaving
+      // `generated: true` would render the wrong jaw and export the wrong STL.
       addPart: (part) =>
         set((state) => {
           state.parts.push(part);
           if (!state.activePart) state.activePart = part.id;
+          state.jawProfile.generated = false;
         }),
 
-      removePart: (id) =>
+      removePart: (id) => {
+        // Pair the state update with cache deletion — CLAUDE.md Invariant 2.
+        // Float32Arrays in geometryCache live outside the store; without this
+        // delete, removed parts leak ~MB of geometry until page reload.
+        geometryCache.delete(id);
         set((state) => {
           state.parts = state.parts.filter((p) => p.id !== id);
           if (state.activePart === id) {
             state.activePart = state.parts[0]?.id ?? null;
           }
-        }),
+          state.jawProfile.generated = false;
+        });
+      },
 
       setActivePart: (id) =>
         set((state) => {
           state.activePart = id;
+          state.jawProfile.generated = false;
         }),
 
       updatePartTransform: (id, transform) =>
@@ -94,16 +110,24 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
           if (!part) return;
           if (transform.position) Object.assign(part.transform.position, transform.position);
           if (transform.rotation) Object.assign(part.transform.rotation, transform.rotation);
+          state.jawProfile.generated = false;
         }),
 
       updateJawBlank: (config) =>
         set((state) => {
           Object.assign(state.jawBlank, config);
+          state.jawProfile.generated = false;
         }),
 
       updateJawProfile: (config) =>
         set((state) => {
+          // Invalidate when a CSG-input field changes, but allow the
+          // hook to set `generated: true` after a successful run.
+          const csgInputChanged =
+            (config.clearance !== undefined && config.clearance !== state.jawProfile.clearance) ||
+            (config.depth     !== undefined && config.depth     !== state.jawProfile.depth);
           Object.assign(state.jawProfile, config);
+          if (csgInputChanged) state.jawProfile.generated = false;
         }),
 
       updateGripFeatures: (config) =>

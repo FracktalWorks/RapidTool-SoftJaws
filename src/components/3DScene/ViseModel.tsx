@@ -12,7 +12,7 @@
  * Tier 2 width steps inward in Z → staircase ledge visible from front/back.
  * TIER3_LEN/H/W fracs remain in presets.ts for internal L-bracket geometry only.
  *
- * All load-bearing helpers (bracketInnerX, jawBaseH, bracketPillarCenterY…)
+ * All load-bearing helpers (bracketInnerX, jawBaseH, bracketBoltY…)
  * are untouched — xOffset coupling invariant preserved.
  */
 
@@ -22,6 +22,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
+import { computeWorldSpanX } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
@@ -152,27 +153,24 @@ export function ViseModel() {
   const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles  = useSoftJawsStore((s) => s.mountingHoles);
   const clampGap       = useSoftJawsStore((s) => s.clampGap);
-  const activePartBbox = useSoftJawsStore((s) => {
+  const activePart = useSoftJawsStore((s) => {
     const id = s.activePart;
-    return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
+    return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
-  // Left L-bracket is ALWAYS fixed.
-  // Right L-bracket tracks the actual world-space right edge of the centered part geometry.
-  // Part geometry is centered by PartMeshes (local X: -w/2 to +w/2).
-  // snapX = leftFaceX + clampGap + partWidth/2   (same as PartMeshes formula)
-  // partRightEdge = snapX + partWidth/2
+  // Left L-bracket is ALWAYS fixed (the static jaw of a milling vise).
+  // Right L-bracket carriage tracks the rotated world-space right edge of the
+  // part — same formula consumed by JawBlankMesh so jaw + carriage move together.
   const leftInnerX = bracketInnerX(viseConfig);
   const rightInnerX = useMemo(() => {
     const fixedInnerX = bracketInnerX(viseConfig);
-    if (!activePartBbox) return fixedInnerX;
-    const partWidth     = activePartBbox.max[0] - activePartBbox.min[0];
-    const leftFaceX     = -fixedInnerX + jawBlank.thickness; // inner face of fixed left jaw blank
-    const partSnapX     = leftFaceX + clampGap + partWidth / 2;
-    const partRightEdge = partSnapX + partWidth / 2;
+    if (!activePart) return fixedInnerX;
+    const worldWidth    = computeWorldSpanX(activePart);
+    const leftFaceX     = -fixedInnerX + jawBlank.thickness;
+    const partRightEdge = leftFaceX + clampGap + worldWidth;
     return Math.min(fixedInnerX, partRightEdge + clampGap + jawBlank.thickness);
-  }, [viseConfig, jawBlank.thickness, activePartBbox, clampGap]);
+  }, [viseConfig, jawBlank.thickness, activePart, clampGap]);
 
   // Pillar face tapped-hole positions — same layout as jaw counterbores.
   const pillarHoles = useMemo(

@@ -22,7 +22,6 @@
  */
 
 import { useMemo } from 'react';
-import * as THREE from 'three';
 import { Edges, Text } from '@react-three/drei';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
@@ -31,7 +30,7 @@ import {
   bracketInnerX,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
-import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
+import { computeWorldSpanX } from '@/utils/partGeometry';
 
 // Dark soft-jaw palette — reads as forged steel against the light vise body.
 const MATERIAL_COLORS: Record<string, string> = {
@@ -47,53 +46,6 @@ const DEFAULT_BLANK_COLOR = '#353a42';
 
 const LABEL_COLOR = '#cfd2d7';  // light grey text against dark jaw
 
-// ─── SHCS Counterbore on inner jaw face ──────────────────────────────────────
-// Bolt is inserted head-first from the workpiece side, so the inner face shows
-// the bolt-head view. Four concentric layers build the depth illusion:
-//
-//   Layer 1 — Bright machined rim   (widest)  → polished counterbore wall
-//   Layer 2 — Dark cavity floor     (ring)    → shadowed recess behind rim
-//   Layer 3 — SHCS cylindrical head (disc)    → black oxide bolt head
-//   Layer 4 — Hex key socket        (6-sided) → Allen drive recess (innermost)
-//
-// Each layer is offset sign*Δ toward the viewer so deeper layers render in front.
-
-function SideBolt({
-  x, y, z, dia, sign,
-}: { x: number; y: number; z: number; dia: number; sign: 1 | -1 }) {
-  const cboreR = dia * 0.90;  // counterbore opening (bright machined face)
-  const floorR = dia * 0.80;  // floor disc — dark ring between rim & head visible
-  const headR  = dia * 0.68;  // SHCS cylindrical head fills most of the pocket
-  const hexR   = dia * 0.28;  // hex key socket (M6/M8 scale)
-  const eps    = 0.05;
-  const yRot   = sign === 1 ? -Math.PI / 2 : Math.PI / 2;
-
-  return (
-    <group position={[x + sign * eps, y, z]}>
-      {/* Layer 1 — Machined counterbore rim: bright ground surface */}
-      <mesh rotation={[0, yRot, 0]}>
-        <circleGeometry args={[cboreR, 48]} />
-        <meshStandardMaterial color="#9aa2a8" roughness={0.18} metalness={0.96} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Layer 2 — Cavity floor: dark annular ring, sells the pocket depth */}
-      <mesh rotation={[0, yRot, 0]} position={[sign * 0.010, 0, 0]}>
-        <circleGeometry args={[floorR, 48]} />
-        <meshStandardMaterial color="#12151a" roughness={0.75} metalness={0.35} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Layer 3 — SHCS head: black oxide cylindrical head, dominant element */}
-      <mesh rotation={[0, yRot, 0]} position={[sign * 0.020, 0, 0]}>
-        <circleGeometry args={[headR, 48]} />
-        <meshStandardMaterial color="#28292e" roughness={0.28} metalness={0.94} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Layer 4 — Hex socket: 6-sided Allen drive recess, near-black */}
-      <mesh rotation={[0, yRot, 0]} position={[sign * 0.030, 0, 0]}>
-        <circleGeometry args={[hexR, 6]} />
-        <meshStandardMaterial color="#06080c" roughness={0.90} metalness={0.10} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
-
 // ─── JawBlankMesh ────────────────────────────────────────────────────────────
 
 const JAWS = [
@@ -102,86 +54,56 @@ const JAWS = [
 ];
 
 export function JawBlankMesh() {
-  const jawBlank          = useSoftJawsStore((s) => s.jawBlank);
-  const viseConfig        = useViseStore((s) => s.viseConfig);
-  const mountingHoles     = useSoftJawsStore((s) => s.mountingHoles);
-  const clampGap          = useSoftJawsStore((s) => s.clampGap);
-  const activePartBbox    = useSoftJawsStore((s) => {
+  const jawBlank   = useSoftJawsStore((s) => s.jawBlank);
+  const viseConfig = useViseStore((s) => s.viseConfig);
+  const clampGap   = useSoftJawsStore((s) => s.clampGap);
+  const activePart = useSoftJawsStore((s) => {
     const id = s.activePart;
-    return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
+    return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
   const { face, height, thickness, material } = jawBlank;
 
-  const { centerY, leftXOff, rightXOff, boltDia, boltZs, holesY, renderFace, labelSize } = useMemo(() => {
-    const baseY   = jawBaseH(viseConfig.jawHeight);
-    const innerX  = bracketInnerX(viseConfig);
-    const maxFace = pillarFaceWidth(viseConfig);
-    const rFace   = Math.min(face, maxFace * 0.98);
-
-    // Bolt diameter scaled to blank thickness and face width — realistic SHCS size
-    const dia = Math.min(thickness * 0.28, rFace * 0.15);
-
-    const positions = computeMountingHolePositions(viseConfig, jawBlank, mountingHoles);
-    const zs        = positions.right.map((p) => p.z);
-
-    // Y of bolt centerline — clamp to jaw blank extent so holes never float
-    // outside the jaw body when blank height is reduced below pillar mid-line.
-    const rawY    = positions.right[0]?.y ?? baseY + height / 2;
-    const jawTopY = baseY + height;
-    const boltR   = Math.min(thickness * 0.28, rFace * 0.15) * 0.90; // approx bolt radius
-    const yCenter = Math.min(Math.max(rawY, baseY + boltR * 2), jawTopY - boltR * 2);
-
-    // Left Jaw is ALWAYS fixed (standard milling vise).
+  // Left jaw is fixed to the left L-bracket. Right jaw is bolted to the
+  // movable right L-bracket carriage — its X must match ViseModel's rightInnerX
+  // formula so the jaw and carriage move together as one rigid assembly.
+  const { centerY, leftXOff, rightXOff, renderFace, labelSize } = useMemo(() => {
+    const baseY     = jawBaseH(viseConfig.jawHeight);
+    const innerX    = bracketInnerX(viseConfig);
+    const maxFace   = pillarFaceWidth(viseConfig);
     const fixedXOff = innerX - thickness / 2;
-    const leftXOff  = fixedXOff;
 
-    // Right Jaw tracks the actual world-space right edge of the part.
-    // The part geometry is centered by PartMeshes (local X: -w/2 to +w/2), so
-    // the world-space part center (snapX) and right edge are:
-    //   snapX         = leftJawFaceX + clampGap + partWidth/2
-    //   partRightEdge = snapX + partWidth/2
-    // We derive this purely from viseConfig + bbox — NOT from the stored transform,
-    // which is only set on gizmo drag and starts at 0 on first load.
-    const rightXOff = activePartBbox
+    const rightXOff = activePart
       ? (() => {
-          const partWidth    = activePartBbox.max[0] - activePartBbox.min[0];
-          const leftFaceX    = -innerX + thickness;           // inner clamping face of fixed left jaw
-          const partSnapX    = leftFaceX + clampGap + partWidth / 2;
-          const partRightEdge = partSnapX + partWidth / 2;
+          const worldWidth    = computeWorldSpanX(activePart);
+          const leftFaceX     = -innerX + thickness;
+          const partRightEdge = leftFaceX + clampGap + worldWidth;
           return Math.min(fixedXOff, partRightEdge + clampGap + thickness / 2);
         })()
       : fixedXOff;
 
     return {
       centerY:    baseY + height / 2,
-      leftXOff,
+      leftXOff:   fixedXOff,
       rightXOff,
-      boltDia:    dia,
-      boltZs:     zs,
-      holesY:     yCenter,
-      renderFace: rFace,
+      renderFace: Math.min(face, maxFace * 0.98),
       labelSize:  height * 0.09,
     };
-  }, [viseConfig, jawBlank, mountingHoles, face, height, thickness, activePartBbox, clampGap]);
+  }, [viseConfig, jawBlank, face, height, thickness, activePart, clampGap]);
 
   const color = MATERIAL_COLORS[material] ?? DEFAULT_BLANK_COLOR;
 
   return (
     <group>
       {JAWS.map(({ sign, label }) => {
-        const xOffset  = sign === -1 ? leftXOff : rightXOff;
-        const x        = sign * xOffset;
-        const innerX   = x - sign * (thickness / 2);  // jaw workpiece-facing face X
+        const xOffset = sign === -1 ? leftXOff : rightXOff;
+        const x       = sign * xOffset;
         const halfFace = renderFace / 2;
         const labelEps = 0.08;
-        const boltSign = (-sign) as 1 | -1;            // bolt head faces inward
 
         return (
           <group key={sign}>
 
-            {/* ── Soft-jaw block — dark forged-steel look ── */}
-            {/* raycast={noop}: jaw blank must NOT intercept pointer events so */}
-            {/* clicks reach the workpiece mesh behind it.                     */}
+            {/* Soft-jaw block — raw blank, no holes until Step 6 */}
             <mesh
               position={[x, centerY, 0]}
               castShadow
@@ -192,20 +114,6 @@ export function JawBlankMesh() {
               <meshStandardMaterial color={color} roughness={0.90} metalness={0.30} />
               <Edges color="#08090c" lineWidth={1} threshold={15} />
             </mesh>
-
-            {/* ── Counterbored SHCS on JAW INNER face (workpiece side) ── */}
-            {/* Bolt head is clamped within jaw Y bounds so it never floats  */}
-            {/* above/below the jaw blank when blank height is reduced.       */}
-            {boltZs.map((bz) => (
-              <SideBolt
-                key={`jaw-${bz}`}
-                x={innerX}
-                y={holesY}
-                z={bz}
-                dia={boltDia}
-                sign={boltSign}
-              />
-            ))}
 
             {/* ── Laser-etched ID label — top-outer corner of each ±Z face ── */}
             {[1, -1].map((zSide) => (

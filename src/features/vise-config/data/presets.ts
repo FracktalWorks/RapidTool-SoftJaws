@@ -16,20 +16,28 @@
 // ─── VISE_GEOMETRY — proportions (the only magic-number table) ────────────────
 
 export const VISE_GEOMETRY = {
-  // Overall envelope
-  BODY_LEN_K_WIDTH:     0.9,    // bodyLen   = jawStroke + jawWidth * K
-  BODY_H_K_JAWHEIGHT:   0.55,   // bodyH = railY = jawHeight * K (= jawBaseH)
+  // ─── Fixed bed / bracket dimensions ────────────────────────────────────────
+  // These are HARDWARE constants — they describe the physical L-bracket and
+  // the bed envelope. They MUST NOT scale with jawStroke or jawHeight, so
+  // changing those user params only resizes what they're labelled to resize.
+  RAIL_HEIGHT:    40,   // mm — bed/rail Y. jawBaseH() returns this verbatim.
+  BR_FOOT_LEN:    30,   // mm — L-bracket foot X length (does not grow with stroke).
+  BR_FOOT_H:       5,   // mm — L-bracket foot Y height (does not grow with vise height).
+  BR_PILLAR_LEN:  30,   // mm — L-bracket pillar X thickness (does not grow with stroke).
 
-  // 2-tier stepped body (heights as fraction of bodyH)
-  TIER1_H_FRAC:   0.25,   // bottom slab — full Z width
-  TIER2_H_FRAC:   0.55,   // upper body — narrower Z (rendered as merged tier2+tier3)
-  TIER3_H_FRAC:   0.20,   // internal-only — drives L-bracket foot height (not a rendered tier)
+  // ─── Body tier proportions (as fractions of RAIL_HEIGHT) ───────────────────
+  // The two slabs split the fixed bed height; sum must equal 1.0.
+  TIER1_H_FRAC:   0.25,
+  TIER2_H_FRAC:   0.75,
+
+  // jawWidth is the literal jaw-face Z width. All Z fracs at 1.00 so the
+  // body and the L-bracket pillar share jawWidth exactly.
   TIER1_W_FRAC:   1.00,
-  TIER2_W_FRAC:   0.85,
-  TIER3_W_FRAC:   0.68,   // internal-only — drives pillar/foot Z width and pillarFaceWidth
-  TIER3_LEN_FRAC: 1.00,   // internal-only — drives L-bracket X positioning (bracketInnerX); 1.0 = foot flush with body end
+  TIER2_W_FRAC:   1.00,
+  TIER3_W_FRAC:   1.00,
+  TIER3_LEN_FRAC: 1.00,   // internal — L-bracket X positioning; 1.0 = foot flush with body end
 
-  // Side mounting holes (middle-tier ±Z faces)
+  // ─── Side mounting holes (decorative — middle tier ±Z faces) ───────────────
   SIDE_HOLE_R_FRAC:    0.18,
   SIDE_HOLE_COUNT:     5,
   SIDE_HOLE_Y_FRAC:    0.55,
@@ -40,23 +48,23 @@ export const VISE_GEOMETRY = {
   CAP_LEN_FRAC: 0.06,
   CAP_W_FRAC:   0.96,
 
-  // Top countersunk SHCS
+  // Top countersunk SHCS on the pillar top face
   TOP_BOLT_DIA_FRAC_W: 0.14,
   TOP_BOLT_DIA_FRAC_H: 0.90,
   TOP_BOLT_XS_FRAC:    0.46,
   TOP_BOLT_ZS_FRAC:    0.28,
 
-  // L-bracket fixed end-stops — chunkier proportions matching Trinckle's
-  // hard-jaw stop blocks. Foot fills most of the platform height and the
-  // pillar is substantially thicker along X for a real "stop block" feel.
-  // BR_FOOT_LEN_FRAC is load-bearing (drives bracketInnerX → jaw position),
-  // so don't change it without re-validating xOffset symmetry.
-  BR_FOOT_H_FRAC:     0.85,
-  BR_FOOT_LEN_FRAC:   0.11,
-  BR_FOOT_W_FRAC:     0.96,
-  BR_PILLAR_H_FRAC:   0.88,
-  BR_PILLAR_LEN_FRAC: 0.10,
+  // L-bracket Z (face-width) and Y (pillar height) fractions —
+  // both at 1.00 so "Vise width" and "Vise height" UI params equal the
+  // visible pillar dimensions exactly.
+  BR_FOOT_W_FRAC:     1.00,
+  BR_PILLAR_H_FRAC:   1.00,
+
+  // Bolt-pattern fractions on the pillar face.
   BR_BOLT_ZS_FRAC:    0.30,
+  // Bolt centreline Y as a fraction of the pillar height, measured from the
+  // pillar bottom up. 0.75 keeps holes clear of the workpiece cavity zone.
+  BR_BOLT_Y_FRAC:     0.75,
 } as const;
 
 // ─── Derived geometry ─────────────────────────────────────────────────────────
@@ -100,14 +108,16 @@ export function computeViseGeometry(
   const { jawWidth, jawHeight, jawStroke } = viseConfig;
   const G = VISE_GEOMETRY;
 
-  const bodyLen   = jawStroke + jawWidth * G.BODY_LEN_K_WIDTH;
+  // bodyLen = stroke + two fixed L-bracket feet. With BR_FOOT_LEN now constant,
+  // bodyLen grows linearly with jawStroke while the feet/pillars stay the same.
+  const bodyLen   = jawStroke + 2 * G.BR_FOOT_LEN;
   const bodyWidth = jawWidth;
-  const railY     = jawHeight * G.BODY_H_K_JAWHEIGHT;
+  // Rail / bed height is fixed — jawHeight no longer raises the bed.
+  const railY     = G.RAIL_HEIGHT;
   const bodyH     = railY;
 
-  const tier3H  = bodyH * G.TIER3_H_FRAC;  // internal — foot height, not a rendered tier
   const tier1H  = bodyH * G.TIER1_H_FRAC;
-  const tier2H  = bodyH * G.TIER2_H_FRAC + tier3H;  // absorbs tier3 into single upper slab
+  const tier2H  = bodyH * G.TIER2_H_FRAC;
 
   const tier1W = bodyWidth * G.TIER1_W_FRAC;
   const tier2W = bodyWidth * G.TIER2_W_FRAC;
@@ -133,16 +143,18 @@ export function computeViseGeometry(
   const capW   = tier2W * G.CAP_W_FRAC;
   const capCx  = bodyLen / 2 + capLen / 2;
 
-  const topBoltDia = Math.min(tier3W * G.TOP_BOLT_DIA_FRAC_W, tier3H * G.TOP_BOLT_DIA_FRAC_H);
+  const topBoltDia = Math.min(tier3W * G.TOP_BOLT_DIA_FRAC_W, G.BR_FOOT_H * G.TOP_BOLT_DIA_FRAC_H);
   const topBoltXs: [number, number] = [-tier3Len * G.TOP_BOLT_XS_FRAC, tier3Len * G.TOP_BOLT_XS_FRAC];
   const topBoltZs: [number, number] = [-tier3W   * G.TOP_BOLT_ZS_FRAC,  tier3W   * G.TOP_BOLT_ZS_FRAC];
   const capBoltZs: [number, number] = [-capW    * G.TOP_BOLT_ZS_FRAC,  capW    * G.TOP_BOLT_ZS_FRAC];
 
-  const brFootH      = tier3H   * G.BR_FOOT_H_FRAC;
-  const brFootLen    = bodyLen  * G.BR_FOOT_LEN_FRAC;
-  const brFootW      = tier2W   * G.BR_FOOT_W_FRAC;  // matches tier2 platform width
+  // L-bracket dimensions — feet and pillar X are FIXED hardware constants now.
+  // Only the pillar Y height tracks jawHeight (so "Vise height" stays literal).
+  const brFootH      = G.BR_FOOT_H;
+  const brFootLen    = G.BR_FOOT_LEN;
+  const brFootW      = tier2W * G.BR_FOOT_W_FRAC;  // matches tier2 platform width
   const brPillarH    = jawHeight * G.BR_PILLAR_H_FRAC;
-  const brPillarLen  = bodyLen  * G.BR_PILLAR_LEN_FRAC;
+  const brPillarLen  = G.BR_PILLAR_LEN;
   const brPillarW    = brFootW;
   const brFootY      = bodyH + brFootH / 2;
   const brPillarY    = bodyH + brFootH + brPillarH / 2;
@@ -172,29 +184,33 @@ export function computeViseGeometry(
 // Used by JawBlankMesh / useJawProfile / CameraController to avoid pulling the
 // full ViseGeometry table when only one or two values are needed.
 
-/** Y of the jaw rail surface (where blanks/parts rest). */
-export function jawBaseH(jawHeight: number): number {
-  return jawHeight * VISE_GEOMETRY.BODY_H_K_JAWHEIGHT;
+/**
+ * Y of the jaw rail surface (where blanks/parts rest).
+ * Now a fixed value — bed height does not scale with jawHeight any more.
+ * Param kept for backwards compatibility with existing callers; ignored.
+ */
+export function jawBaseH(_jawHeight?: number): number {
+  return VISE_GEOMETRY.RAIL_HEIGHT;
 }
 
-/** Total body length along X. */
-export function viseBodyLen(viseConfig: { jawWidth: number; jawStroke: number }): number {
-  return viseConfig.jawStroke + viseConfig.jawWidth * VISE_GEOMETRY.BODY_LEN_K_WIDTH;
+/** Total body length along X — stroke plus two fixed L-bracket feet. */
+export function viseBodyLen(viseConfig: { jawStroke: number }): number {
+  return viseConfig.jawStroke + 2 * VISE_GEOMETRY.BR_FOOT_LEN;
 }
 
-/** L-bracket foot length along X. */
-export function bracketFootLen(viseConfig: { jawWidth: number; jawStroke: number }): number {
-  return viseBodyLen(viseConfig) * VISE_GEOMETRY.BR_FOOT_LEN_FRAC;
+/** L-bracket foot length along X — fixed hardware dimension. */
+export function bracketFootLen(_viseConfig?: { jawStroke?: number }): number {
+  return VISE_GEOMETRY.BR_FOOT_LEN;
 }
 
 /**
  * Inner X of the L-bracket pillar — soft-jaw outer face abuts here.
- * Pillar sits at the inner end of its foot, so
- *   pillarInner = tier3Len/2 − brFootLen.
+ * With foot length fixed, this collapses to `jawStroke / 2` exactly —
+ * preserving the literal-precision invariant that `2 × bracketInnerX = jawStroke`.
  */
-export function bracketInnerX(viseConfig: { jawWidth: number; jawStroke: number }): number {
+export function bracketInnerX(viseConfig: { jawStroke: number }): number {
   const tier3Len = viseBodyLen(viseConfig) * VISE_GEOMETRY.TIER3_LEN_FRAC;
-  return tier3Len / 2 - bracketFootLen(viseConfig);
+  return tier3Len / 2 - VISE_GEOMETRY.BR_FOOT_LEN;
 }
 
 /** Z width of the L-bracket pillar — caps practical jaw face dimension. */
@@ -204,16 +220,16 @@ export function pillarFaceWidth(viseConfig: { jawWidth: number }): number {
 }
 
 /**
- * Y of the L-bracket pillar's vertical mid-line — the canonical line that
- * mounting bolts pass through so they hit the pillar's exact center AND
- * stay well inside the jaw's vertical extent.
+ * Y of the mounting-bolt centreline — `BR_BOLT_Y_FRAC` of the way up the
+ * pillar from its bottom (default 0.75 = 3/4 up). Sits above the workpiece
+ * cavity zone and matches real soft-jaw practice.
+ *
+ * After the bed/bracket decoupling, this is:
+ *   RAIL_HEIGHT + BR_FOOT_H + (jawHeight × BR_PILLAR_H_FRAC) × BR_BOLT_Y_FRAC
  */
-export function bracketPillarCenterY(
+export function bracketBoltY(
   viseConfig: { jawHeight: number },
 ): number {
-  const bodyH     = jawBaseH(viseConfig.jawHeight);
-  const tier3H    = bodyH * VISE_GEOMETRY.TIER3_H_FRAC;
-  const brFootH   = tier3H * VISE_GEOMETRY.BR_FOOT_H_FRAC;
   const brPillarH = viseConfig.jawHeight * VISE_GEOMETRY.BR_PILLAR_H_FRAC;
-  return bodyH + brFootH + brPillarH / 2;
+  return VISE_GEOMETRY.RAIL_HEIGHT + VISE_GEOMETRY.BR_FOOT_H + brPillarH * VISE_GEOMETRY.BR_BOLT_Y_FRAC;
 }

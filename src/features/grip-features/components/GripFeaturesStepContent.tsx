@@ -1,4 +1,3 @@
-import React from 'react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import type { GripPattern } from '../types';
 
@@ -44,7 +43,7 @@ export function GripFeaturesStepContent() {
                 type="number" min={0.1} max={3} step={0.1}
                 value={gripFeatures.depth}
                 onChange={(e) => updateGripFeatures({ depth: parseFloat(e.target.value) || 0 })}
-                className="w-20 rounded border border-input bg-background px-2 py-1 text-right text-xs"
+                className="w-28 rounded border border-input bg-background px-2 py-1 text-right text-xs"
               />
               <span className="text-muted-foreground">mm</span>
             </div>
@@ -56,7 +55,7 @@ export function GripFeaturesStepContent() {
                 type="number" min={0.5} max={10} step={0.5}
                 value={gripFeatures.spacing}
                 onChange={(e) => updateGripFeatures({ spacing: parseFloat(e.target.value) || 0 })}
-                className="w-20 rounded border border-input bg-background px-2 py-1 text-right text-xs"
+                className="w-28 rounded border border-input bg-background px-2 py-1 text-right text-xs"
               />
               <span className="text-muted-foreground">mm</span>
             </div>

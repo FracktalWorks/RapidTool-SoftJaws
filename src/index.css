@@ -11,22 +11,17 @@
   font-display: swap;
 }
 
-/* Force show number input spinners */
+/* Number input spinners — inline layout so they never overlay the value text */
 input[type='number'] {
-  min-height: 28px !important;
-  -moz-appearance: number-input !important;
+  min-height: 28px;
+  -moz-appearance: number-input;
 }
 
 input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button {
-  -webkit-appearance: inner-spin-button !important;
-  opacity: 1 !important;
-  height: 80% !important;
-  position: absolute !important;
-  top: 10% !important;
-  right: 2px !important;
-  cursor: pointer !important;
-  margin: 0 !important;
+  -webkit-appearance: inner-spin-button;
+  opacity: 1;
+  cursor: pointer;
 }
 
 /* RapidTool Design System — Professional 3D Viewer Theme */

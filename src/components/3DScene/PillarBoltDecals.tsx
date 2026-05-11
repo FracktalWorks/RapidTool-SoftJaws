@@ -22,7 +22,6 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import {
   bracketInnerX,
-  viseBodyLen,
   VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
@@ -76,9 +75,9 @@ export function PillarBoltDecals() {
 
     const { left, right } = computeMountingHolePositions(viseConfig, jawBlank, mountingHoles);
 
-    // Pillar outer X = inner face + pillar X thickness (BR_PILLAR_LEN_FRAC × bodyLen).
-    const pillarOuterRight =
-      bracketInnerX(viseConfig) + viseBodyLen(viseConfig) * VISE_GEOMETRY.BR_PILLAR_LEN_FRAC;
+    // Pillar outer X = inner face + fixed pillar X thickness.
+    // BR_PILLAR_LEN is a hardware constant — doesn't scale with jawStroke.
+    const pillarOuterRight = bracketInnerX(viseConfig) + VISE_GEOMETRY.BR_PILLAR_LEN;
 
     const throughR = mountingHoles.boltSize / 2 + HOLE_CLEARANCE;
 

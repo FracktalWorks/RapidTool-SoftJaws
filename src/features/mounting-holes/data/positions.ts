@@ -23,7 +23,7 @@
 
 import {
   bracketInnerX,
-  bracketPillarCenterY,
+  bracketBoltY,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
 import type { ViseConfig, JawBlankConfig, MountingHolesConfig } from '@/stores/types';
@@ -52,7 +52,7 @@ export function computeMountingHolePositions(
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
   const xCenterRight = adaptiveXOff ?? (innerX - jawBlank.thickness / 2);
-  const yCenter      = bracketPillarCenterY(viseConfig);
+  const yCenter      = bracketBoltY(viseConfig);
 
   const count   = Math.max(1, Math.floor(mountingHoles.count));
   const spacing = Math.max(0, mountingHoles.spacing);

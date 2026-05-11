@@ -5,7 +5,7 @@
  * matching the same pattern as RapidTool-Fixture's AppShell.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   DashboardLayout,
   SidebarIcon,
@@ -16,6 +16,7 @@ import {
 import { RapidToolLogo } from '@/components/RapidToolLogo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import {
   Upload,
@@ -36,6 +37,7 @@ import type { SoftJawsWorkflowStep } from '@/workflow';
 import { ContextOptionsPanel } from '@/components/ContextOptionsPanel';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { Scene3D } from '@/components/3DScene';
+import { DesignBlockPreview } from '@/components/DesignBlockPreview';
 
 // ─── Lucide icon map for workflow steps ──────────────────────────────────────
 
@@ -65,12 +67,18 @@ function AppHeader() {
   }, []);
 
   const handleResetSession = useCallback(() => {
-    // 1. Clear all non-serializable geometry from the module-level cache
+    // 1. Clear all non-serializable geometry from the module-level cache.
     geometryCache.clear();
-    // 2. Reset domain store to initial state (parts, jaw config, export, etc.)
+    // 2. Reset the vise store — restores default jawWidth/jawHeight/jawStroke
+    //    and the bolt-pattern tSlotSpacing. Without this, the vise dimensions
+    //    the user changed would stick around after the "reset".
+    useViseStore.getState().resetVise();
+    // 3. Reset the domain store (parts, jaw blank, profile, holes, export).
     useSoftJawsStore.getState().reset();
-    // 3. Navigate workflow back to the first step
+    // 4. Navigate the workflow back to the first step.
     useWorkflowStore.getState().goToStep('vise-config');
+    // 5. Re-fit the camera to the now-default scene (no parts, default vise).
+    window.dispatchEvent(new CustomEvent('set-view-orientation', { detail: 'iso' }));
   }, []);
 
   const handleSetOrientation = useCallback((orientation: string) => {
@@ -211,6 +219,22 @@ export function AppShell() {
   const [isContextPanelCollapsed, setIsContextPanelCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(true);
 
+  // Cross-store invalidation: any change to viseConfig (different store) must
+  // mark the cached jaw profile as stale, since the CSG result was baked
+  // against the OLD vise dimensions. Same-store fields already invalidate
+  // inside softJawsStore actions.
+  useEffect(() => {
+    let prev = useViseStore.getState().viseConfig;
+    return useViseStore.subscribe((state) => {
+      if (state.viseConfig !== prev) {
+        prev = state.viseConfig;
+        if (useSoftJawsStore.getState().jawProfile.generated) {
+          useSoftJawsStore.getState().updateJawProfile({ generated: false });
+        }
+      }
+    });
+  }, []);
+
   return (
     <DashboardLayout
       config={{
@@ -238,6 +262,10 @@ export function AppShell() {
     >
       {/* Main 3D Viewport */}
       <Scene3D />
+
+      {/* Floating Trinckle-style design preview — visible when a sidebar
+          dimension input is hovered or focused. */}
+      <DesignBlockPreview />
     </DashboardLayout>
   );
 }

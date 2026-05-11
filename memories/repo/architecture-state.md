@@ -36,5 +36,5 @@
 - `.github/instructions/cad-ui-integration.instructions.md` — Component APIs, cad-ui ownership rules
 - `.github/instructions/workflow-implementation.instructions.md` — 7 workflow steps guide
 - `.github/agents/softjaws-architect.agent.md` — Full architect agent with Step 0 mandatory checklist
-
+    
 

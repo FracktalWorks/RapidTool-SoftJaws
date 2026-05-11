@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import { getStepGate } from '@/workflow';
 import { useMountingHoles } from '../hooks/useMountingHoles';
 
@@ -10,11 +11,14 @@ export function MountingHolesStepContent() {
   const partCount          = useSoftJawsStore((s) => s.parts.length);
   const profileGenerated   = useSoftJawsStore((s) => s.jawProfile.generated);
   const updateMountingHoles = useSoftJawsStore((s) => s.updateMountingHoles);
+  const visePitch          = useViseStore((s) => s.viseConfig.tSlotSpacing);
   const { status, error, generate } = useMountingHoles();
 
-  const gate        = getStepGate('mounting-holes', { partCount, profileGenerated });
-  const isRunning   = status === 'running';
-  const canGenerate = gate.allowed && !isRunning;
+  const gate          = getStepGate('mounting-holes', { partCount, profileGenerated });
+  const isRunning     = status === 'running';
+  const canGenerate   = gate.allowed && !isRunning;
+  const matchesVise   = visePitch != null && Math.abs(mountingHoles.spacing - visePitch) < 0.01;
+  const showVisePitch = visePitch != null && !matchesVise;
 
   return (
     <div className="flex flex-col gap-4 p-3">
@@ -38,19 +42,41 @@ export function MountingHolesStepContent() {
           </select>
         </label>
 
-        <label className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Spacing</span>
-          <div className="flex items-center gap-1">
-            <input
-              type="number" min={20} max={200} step={5}
-              value={mountingHoles.spacing}
-              disabled={isRunning}
-              onChange={(e) => updateMountingHoles({ spacing: parseFloat(e.target.value) || 0 })}
-              className="w-20 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
-            />
-            <span className="text-muted-foreground">mm</span>
-          </div>
-        </label>
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Spacing</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min={20} max={200} step={5}
+                value={mountingHoles.spacing}
+                disabled={isRunning}
+                onChange={(e) => updateMountingHoles({ spacing: parseFloat(e.target.value) || 0 })}
+                className="w-28 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
+              />
+              <span className="text-muted-foreground">mm</span>
+            </div>
+          </label>
+          {matchesVise && (
+            <span className="text-[10px] text-green-600 dark:text-green-400 font-tech pl-0.5">
+              ✓ Matches vise bolt pattern ({visePitch} mm)
+            </span>
+          )}
+          {showVisePitch && (
+            <div className="flex items-center justify-between pl-0.5">
+              <span className="text-[10px] text-amber-500 font-tech">
+                Vise pattern: {visePitch} mm — bolts won't align
+              </span>
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => updateMountingHoles({ spacing: visePitch! })}
+                className="text-[10px] font-tech underline text-primary hover:text-primary/80 disabled:opacity-50"
+              >
+                Match vise
+              </button>
+            </div>
+          )}
+        </div>
 
         <label className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Count per jaw</span>
@@ -59,7 +85,7 @@ export function MountingHolesStepContent() {
             value={mountingHoles.count}
             disabled={isRunning}
             onChange={(e) => updateMountingHoles({ count: parseInt(e.target.value) || 1 })}
-            className="w-20 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
+            className="w-28 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
           />
         </label>
 
