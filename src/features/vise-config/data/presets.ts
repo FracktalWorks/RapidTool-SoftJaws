@@ -62,9 +62,15 @@ export const VISE_GEOMETRY = {
 
   // Bolt-pattern fractions on the pillar face.
   BR_BOLT_ZS_FRAC:    0.30,
-  // Bolt centreline Y as a fraction of the pillar height, measured from the
-  // pillar bottom up. 0.75 keeps holes clear of the workpiece cavity zone.
-  BR_BOLT_Y_FRAC:     0.75,
+  // Bolt centreline Y — fixed offset (mm) from the bracket bottom (top of foot).
+  // This is real-world vise hardware behaviour: the tapped-hole pattern on the
+  // bracket is at a constant position regardless of which jaw stock is mounted
+  // or how tall the pillar is. A fraction of jawHeight would put the bolts
+  // higher and higher as the pillar grows — eventually outside the jaw blank
+  // (the CSG cylinder then sits in mid-air, leaving a "dummy" pillar-only
+  // decal and no through-hole). 30 mm sits comfortably above the workpiece
+  // cavity zone for typical 50–80 mm jaws.
+  BR_BOLT_Y_OFFSET:   30,
 } as const;
 
 // ─── Derived geometry ─────────────────────────────────────────────────────────
@@ -220,16 +226,16 @@ export function pillarFaceWidth(viseConfig: { jawWidth: number }): number {
 }
 
 /**
- * Y of the mounting-bolt centreline — `BR_BOLT_Y_FRAC` of the way up the
- * pillar from its bottom (default 0.75 = 3/4 up). Sits above the workpiece
- * cavity zone and matches real soft-jaw practice.
+ * Y of the mounting-bolt centreline — fixed offset above the bracket foot.
  *
- * After the bed/bracket decoupling, this is:
- *   RAIL_HEIGHT + BR_FOOT_H + (jawHeight × BR_PILLAR_H_FRAC) × BR_BOLT_Y_FRAC
+ *   bracketBoltY = RAIL_HEIGHT + BR_FOOT_H + BR_BOLT_Y_OFFSET
+ *
+ * The value does NOT scale with `jawHeight`. Real bracket hardware has its
+ * tapped-hole pattern at a constant position; a fraction of jawHeight would
+ * push the bolt beyond the jaw blank's vertical extent on tall pillars and
+ * leave the CSG cylinder cutting air. The param is kept optional for
+ * API symmetry with the other helpers but is no longer read.
  */
-export function bracketBoltY(
-  viseConfig: { jawHeight: number },
-): number {
-  const brPillarH = viseConfig.jawHeight * VISE_GEOMETRY.BR_PILLAR_H_FRAC;
-  return VISE_GEOMETRY.RAIL_HEIGHT + VISE_GEOMETRY.BR_FOOT_H + brPillarH * VISE_GEOMETRY.BR_BOLT_Y_FRAC;
+export function bracketBoltY(_viseConfig?: { jawHeight?: number }): number {
+  return VISE_GEOMETRY.RAIL_HEIGHT + VISE_GEOMETRY.BR_FOOT_H + VISE_GEOMETRY.BR_BOLT_Y_OFFSET;
 }

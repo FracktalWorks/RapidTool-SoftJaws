@@ -16,9 +16,34 @@
  *       endloop
  *     endfacet
  *   endsolid
+ *
+ * ─── Z-up CAD → Y-up R3F rotation ───────────────────────────────────────────
+ * Engineering CAD (SolidWorks, Fusion 360, Onshape, NX, CATIA — the
+ * dominant authoring tools for CNC workpieces) exports STL with Z as the
+ * up axis. Three.js / R3F is Y-up. Without converting at parse time, a
+ * workpiece would appear tipped on its side relative to the vise rail.
+ *
+ * Applied here at the parser so every downstream consumer (boundingBox,
+ * geometryCache, CSG workers, JawBlankMesh, computeWorldSpanX, exports)
+ * sees R3F coordinates already. Do NOT remove without re-validating
+ * every step's geometry assumptions.
+ *
+ * Y-up STLs (slicer exports, Blender) will land tilted; user re-orients
+ * with the gizmo.
  */
 
 import type { ParseResult } from '../types';
+
+/**
+ * Rotate a CAD-Z-up triple to R3F-Y-up.
+ *   (x, y, z) → (x, z, -y)   — equivalent to a +π/2 rotation around X.
+ *
+ * Direction vectors (normals) transform identically under pure rotation,
+ * so the same helper is used for both positions and normals.
+ */
+function zUpToYUp(x: number, y: number, z: number): [number, number, number] {
+  return [x, z, -y];
+}
 
 function generateId(): string {
   return `part-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -59,16 +84,20 @@ function parseBinarySTL(buffer: ArrayBuffer, fileName: string, fileSize: number)
 
   let offset = 84;
   for (let i = 0; i < faceCount; i++) {
-    const nx = view.getFloat32(offset,     true);
-    const ny = view.getFloat32(offset + 4, true);
-    const nz = view.getFloat32(offset + 8, true);
+    const [nx, ny, nz] = zUpToYUp(
+      view.getFloat32(offset,     true),
+      view.getFloat32(offset + 4, true),
+      view.getFloat32(offset + 8, true),
+    );
     offset += 12;
 
     const base = i * 9;
     for (let v = 0; v < 3; v++) {
-      const x = view.getFloat32(offset,     true);
-      const y = view.getFloat32(offset + 4, true);
-      const z = view.getFloat32(offset + 8, true);
+      const [x, y, z] = zUpToYUp(
+        view.getFloat32(offset,     true),
+        view.getFloat32(offset + 4, true),
+        view.getFloat32(offset + 8, true),
+      );
       offset += 12;
 
       positions[base + v * 3]     = x;
@@ -78,6 +107,7 @@ function parseBinarySTL(buffer: ArrayBuffer, fileName: string, fileSize: number)
       normals  [base + v * 3 + 1] = ny;
       normals  [base + v * 3 + 2] = nz;
 
+      // Bbox tracked in R3F coords (post-rotation).
       if (x < minX) minX = x; if (x > maxX) maxX = x;
       if (y < minY) minY = y; if (y > maxY) maxY = y;
       if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
@@ -116,10 +146,14 @@ function parseASCIISTL(text: string, fileName: string, fileSize: number): ParseR
   let normalMatch: RegExpExecArray | null;
   let faceCount = 0;
 
-  // Collect normals separately
+  // Collect normals separately — rotated to R3F coords on the way in.
   const faceNormals: [number, number, number][] = [];
   while ((normalMatch = normalRe.exec(text)) !== null) {
-    faceNormals.push([parseFloat(normalMatch[1]), parseFloat(normalMatch[2]), parseFloat(normalMatch[3])]);
+    faceNormals.push(zUpToYUp(
+      parseFloat(normalMatch[1]),
+      parseFloat(normalMatch[2]),
+      parseFloat(normalMatch[3]),
+    ));
   }
 
   let vertMatch: RegExpExecArray | null;
@@ -128,15 +162,18 @@ function parseASCIISTL(text: string, fileName: string, fileSize: number): ParseR
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
 
   while ((vertMatch = vertexRe.exec(text)) !== null) {
-    const x = parseFloat(vertMatch[1]);
-    const y = parseFloat(vertMatch[2]);
-    const z = parseFloat(vertMatch[3]);
+    const [x, y, z] = zUpToYUp(
+      parseFloat(vertMatch[1]),
+      parseFloat(vertMatch[2]),
+      parseFloat(vertMatch[3]),
+    );
     posArr.push(x, y, z);
 
     const faceIdx = Math.floor(vertIdx / 3);
     const [nx, ny, nz] = faceNormals[faceIdx] ?? [0, 1, 0];
     nrmArr.push(nx, ny, nz);
 
+    // Bbox tracked in R3F coords (post-rotation).
     if (x < minX) minX = x; if (x > maxX) maxX = x;
     if (y < minY) minY = y; if (y > maxY) maxY = y;
     if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
