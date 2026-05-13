@@ -25,6 +25,7 @@ import {
   bracketInnerX,
   bracketBoltY,
   pillarFaceWidth,
+  jawBaseH,
 } from '@/features/vise-config/data/presets';
 import type { ViseConfig, JawBlankConfig, MountingHolesConfig } from '@/stores/types';
 
@@ -46,17 +47,34 @@ const EDGE_MARGIN_K = 1.0;  // hole edge must clear face/pillar edge by ≥ 1× 
 
 export function computeMountingHolePositions(
   viseConfig:    Pick<ViseConfig, 'jawWidth' | 'jawHeight' | 'jawStroke'>,
-  jawBlank:      Pick<JawBlankConfig, 'thickness' | 'face'>,
+  jawBlank:      Pick<JawBlankConfig, 'thickness' | 'face' | 'height'>,
   mountingHoles: Pick<MountingHolesConfig, 'count' | 'spacing' | 'boltSize'>,
   adaptiveXOff?: number,  // jaw |x| center — overrides formula when part is loaded
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
   const xCenterRight = adaptiveXOff ?? (innerX - jawBlank.thickness / 2);
-  const yCenter      = bracketBoltY(viseConfig);
+  const nominalY     = bracketBoltY(viseConfig);
 
   const count   = Math.max(1, Math.floor(mountingHoles.count));
   const spacing = Math.max(0, mountingHoles.spacing);
   const boltDia = mountingHoles.boltSize;
+
+  // --- P2 FIX: Y-Clamping ---
+  // If the user specifies an unusually short jaw blank, the fixed bolt Y (75mm)
+  // might sit above the jaw, leaving the CSG cylinder floating in mid-air.
+  // We must clamp the hole's Y position to safely remain inside the jaw bounds.
+  const jawBaseY = jawBaseH(viseConfig.jawHeight);
+  const jawTopY  = jawBaseY + jawBlank.height;
+  
+  // Margin ensures the counterbore doesn't break through the top edge.
+  // Counterbore radius is boltDia * 0.9. Add 1mm buffer.
+  const yMargin = (boltDia * 0.9) + 1.0;
+  
+  // Clamp Y center to be within the jaw blank's vertical extent
+  const yCenter = Math.max(
+    jawBaseY + yMargin,
+    Math.min(jawTopY - yMargin, nominalY)
+  );
 
   // Z must fit within the narrower of (jaw face) and (pillar Z width) so the
   // hole emerges cleanly through both pieces.

@@ -68,11 +68,8 @@ export function PillarBoltDecals() {
   const viseConfig    = useViseStore((s) => s.viseConfig);
   const jawBlank      = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles = useSoftJawsStore((s) => s.mountingHoles);
-  const holesReady    = useSoftJawsStore((s) => s.mountingHoles.generated);
 
   const decals = useMemo(() => {
-    if (!holesReady) return null;
-
     const { left, right } = computeMountingHolePositions(viseConfig, jawBlank, mountingHoles);
 
     // Pillar outer X = inner face + fixed pillar X thickness.
@@ -87,7 +84,7 @@ export function PillarBoltDecals() {
       left,
       right,
     };
-  }, [holesReady, viseConfig, jawBlank, mountingHoles]);
+  }, [viseConfig, jawBlank, mountingHoles]);
 
   if (!decals) return null;
   const { throughR, pillarOuterRight, left, right } = decals;
