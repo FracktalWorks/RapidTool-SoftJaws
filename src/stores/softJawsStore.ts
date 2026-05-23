@@ -39,11 +39,11 @@ const INITIAL_STATE: SoftJawsState = {
   },
   mountingHoles: {
     pattern: 'standard',
-    boltSize: 8,
-    // Default matches the initial vise's tSlotSpacing (125 mm — Kurt-style
-    // 6" CNC vise). Updated automatically when a vise preset is applied;
-    // see ViseConfigStepContent.handlePresetSelect.
-    spacing: 125,
+    boltSize: 10,           // Screw diameter M10 default
+    screwheadHeight: 2.0,   // default 2mm
+    screwheadDiameter: 22.0,// default 22mm
+    spacing: 100,           // default 100mm
+    holesHeight: 17.0,      // default 17mm
     count: 2,
     generated: false,
   },
@@ -135,6 +135,7 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
         set((state) => {
           Object.assign(state.jawBlank, config);
           state.jawProfile.generated = false;
+          state.mountingHoles.generated = false;
         }),
 
       updateJawProfile: (config) =>
@@ -155,7 +156,21 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
 
       updateMountingHoles: (config) =>
         set((state) => {
+          const geomFields: Array<keyof MountingHolesConfig> = [
+            'boltSize',
+            'screwheadHeight',
+            'screwheadDiameter',
+            'spacing',
+            'holesHeight',
+            'count',
+            'pattern'
+          ];
+          const affected = Object.keys(config).some(k => geomFields.includes(k as keyof MountingHolesConfig));
           Object.assign(state.mountingHoles, config);
+          if (affected) {
+            state.mountingHoles.generated = false;
+            state.jawProfile.generated = false;
+          }
         }),
 
       updateExportConfig: (config) =>

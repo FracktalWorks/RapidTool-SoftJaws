@@ -32,7 +32,6 @@ import { ViseConfigStepContent }   from '@/features/vise-config';
 import { JawBlankStepContent }     from '@/features/jaw-blank';
 import { JawProfileStepContent }   from '@/features/jaw-profile';
 import { GripFeaturesStepContent } from '@/features/grip-features';
-import { MountingHolesStepContent } from '@/features/mounting-holes';
 import { ExportStepContent }       from '@/features/export';
 
 // ─── Step Icon Map ─────────────────────────────────────────────────────────────────
@@ -43,7 +42,6 @@ const STEP_ICONS: Record<SoftJawsWorkflowStep, React.FC<{ className?: string }>>
   'jaw-blank':      Box,
   'jaw-profile':    Wrench,
   'grip-features':  Grip,
-  'mounting-holes': CircleDot,
   'export':         Download,
 };
 
@@ -55,7 +53,6 @@ const STEP_COMPONENTS: Record<SoftJawsWorkflowStep, React.FC> = {
   'jaw-blank':      JawBlankStepContent,
   'jaw-profile':    JawProfileStepContent,
   'grip-features':  GripFeaturesStepContent,
-  'mounting-holes': MountingHolesStepContent,
   'export':         ExportStepContent,
 };
 

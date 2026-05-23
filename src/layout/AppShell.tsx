@@ -38,6 +38,7 @@ import { ContextOptionsPanel } from '@/components/ContextOptionsPanel';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
 import { Scene3D } from '@/components/3DScene';
 import { DesignBlockPreview } from '@/components/DesignBlockPreview';
+import { useMountingHoles } from '@/features/mounting-holes/hooks/useMountingHoles';
 
 // ─── Lucide icon map for workflow steps ──────────────────────────────────────
 
@@ -47,7 +48,6 @@ const STEP_ICONS: Record<SoftJawsWorkflowStep, React.FC<{ className?: string }>>
   'jaw-blank': Box,
   'jaw-profile': Wrench,
   'grip-features': Grip,
-  'mounting-holes': CircleDot,
   'export': Download,
 };
 
@@ -219,6 +219,16 @@ export function AppShell() {
   const [isContextPanelCollapsed, setIsContextPanelCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(true);
 
+  const { generated: holesGenerated } = useSoftJawsStore((s) => s.mountingHoles);
+  const { generate: generateHoles } = useMountingHoles();
+
+  // Auto-drill mounting holes when parameters change
+  useEffect(() => {
+    if (!holesGenerated) {
+      generateHoles();
+    }
+  }, [holesGenerated, generateHoles]);
+
   // Cross-store invalidation: any change to viseConfig (different store) must
   // mark the cached jaw profile as stale, since the CSG result was baked
   // against the OLD vise dimensions. Same-store fields already invalidate
@@ -230,6 +240,9 @@ export function AppShell() {
         prev = state.viseConfig;
         if (useSoftJawsStore.getState().jawProfile.generated) {
           useSoftJawsStore.getState().updateJawProfile({ generated: false });
+        }
+        if (useSoftJawsStore.getState().mountingHoles.generated) {
+          useSoftJawsStore.getState().updateMountingHoles({ generated: false });
         }
       }
     });

@@ -30,24 +30,28 @@ const CYL_SEGMENTS        = 48;    // radial segments per cylinder — smooth at
 /**
  * Produces a merged geometry of all bolt-hole tools for one side.
  *
- * @param positions     World-space hole centerlines for this side.
- * @param sign          -1 for the left blank, +1 for the right blank.
- *                      Determines which X face the counterbore sits on.
- * @param boltSize      Nominal bolt diameter (mm) — `mountingHoles.boltSize`.
- * @param thickness     Blank X extent — `jawBlank.thickness`.
+ * @param positions          World-space hole centerlines for this side.
+ * @param sign               -1 for the left blank, +1 for the right blank.
+ *                           Determines which X face the counterbore sits on.
+ * @param boltSize           Nominal bolt diameter (mm).
+ * @param screwheadDiameter  Screwhead/counterbore diameter (mm).
+ * @param screwheadHeight    Screwhead/counterbore depth (mm).
+ * @param thickness          Blank X extent — `jawBlank.thickness`.
  */
 export function buildHoleToolGeometry(
-  positions: HolePosition[],
-  sign:      -1 | 1,
-  boltSize:  number,
-  thickness: number,
+  positions:         HolePosition[],
+  sign:              -1 | 1,
+  boltSize:          number,
+  screwheadDiameter: number,
+  screwheadHeight:   number,
+  thickness:         number,
 ): THREE.BufferGeometry | null {
   if (positions.length === 0) return null;
 
   const throughR = boltSize / 2 + HOLE_CLEARANCE;
   const throughL = thickness + THROUGH_OVERSHOOT * 2;
-  const cbR      = (boltSize * COUNTERBORE_DIA_K) / 2;
-  const cbL      = boltSize * COUNTERBORE_DEPTH_K;
+  const cbR      = screwheadDiameter / 2;
+  const cbL      = screwheadHeight;
 
   // Inner-face X for each blank (workpiece side) — counterbore center sits
   // cbL/2 inboard of the inner face so its rim is flush with that face.

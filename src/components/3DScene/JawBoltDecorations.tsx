@@ -38,7 +38,6 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
-import { COUNTERBORE_DIA_K } from '@/features/mounting-holes/utils/buildHoleTool';
 import { effectiveClampGap } from '@/utils/partGeometry';
 
 const HOLE_DARK_COLOR  = '#06080c';
@@ -52,7 +51,7 @@ interface JawCounterboreProps {
   faceX: number;
   y: number;
   z: number;
-  /** Counterbore diameter — `boltSize × COUNTERBORE_DIA_K`. */
+  /** Counterbore diameter — `mountingHoles.screwheadDiameter / 2`. */
   cboreR: number;
   /** +1 for left jaw (opens toward +X), −1 for right jaw (opens toward −X). */
   outwardSign: 1 | -1;
@@ -117,7 +116,7 @@ export function JawBoltDecorations() {
     const { left, right } = computeMountingHolePositions(
       viseConfig, jawBlank, mountingHoles, activePart, renderClampGap,
     );
-    const cboreR = (mountingHoles.boltSize * COUNTERBORE_DIA_K) / 2;
+    const cboreR = mountingHoles.screwheadDiameter / 2;
     const halfThickness = jawBlank.thickness / 2;
     return { left, right, cboreR, halfThickness };
   }, [viseConfig, jawBlank, mountingHoles, activePart, renderClampGap]);

@@ -205,8 +205,19 @@ export function useJawProfile(): UseJawProfileReturn {
     const partSpanX    = computeWorldSpanX(part);
     const snapX        = leftFaceX + clampGap + partSpanX / 2;
 
-    // ── Build left & right blanks, bake world transform into geometry ───────
-    const buildBakedGeo = (xCenter: number) => {
+    // ── Build left & right blanks, using JAW_HOLED if present, or raw blank box ──
+    const getBaseGeo = (cacheKey: string, xCenter: number) => {
+      const cached = geometryCache.get(cacheKey);
+      if (cached) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
+        geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
+        if (cached.indices) {
+          geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
+        }
+        return geo;
+      }
+
       const mesh = buildBlankMesh(
         jawBlank.thickness,
         jawBlank.height,
@@ -219,8 +230,8 @@ export function useJawProfile(): UseJawProfileReturn {
       return geo;
     };
 
-    const leftGeo  = buildBakedGeo(leftXCenter);
-    const rightGeo = buildBakedGeo(rightXCenter);
+    const leftGeo  = getBaseGeo(JAW_HOLED_CACHE_KEY_LEFT, leftXCenter);
+    const rightGeo = getBaseGeo(JAW_HOLED_CACHE_KEY_RIGHT, rightXCenter);
 
     // The worker positions the part at `partHeight/2 + transform.y`, which
     // would land it with its bottom at world Y = 0. The scene's PartMeshes
@@ -262,6 +273,9 @@ export function useJawProfile(): UseJawProfileReturn {
         runCsgWorker(makePayload(leftGeo,  [-1, 0, 0])),
         runCsgWorker(makePayload(rightGeo, [+1, 0, 0])),
       ]);
+
+      leftGeo.dispose();
+      rightGeo.dispose();
 
       if (!leftRes.success || !leftRes.positions || !leftRes.normals) {
         throw new Error(leftRes.error || 'CSG worker returned no geometry for the left blank.');

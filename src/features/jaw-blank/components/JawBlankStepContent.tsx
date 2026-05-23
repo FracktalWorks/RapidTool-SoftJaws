@@ -63,9 +63,12 @@ const DIMS: {
   },
 ];
 
+const BOLT_SIZES = [4, 5, 6, 8, 10, 12, 16];
+
 export function JawBlankStepContent() {
-  const { jawBlank, updateJawBlank, clampGap } = useSoftJawsStore();
+  const { jawBlank, updateJawBlank, clampGap, mountingHoles, updateMountingHoles } = useSoftJawsStore();
   const viseConfig = useViseStore((s) => s.viseConfig);
+  const visePitch = useViseStore((s) => s.viseConfig.tSlotSpacing);
   const setHovered = useDimensionHoverStore((s) => s.setHovered);
   const clearHover = useDimensionHoverStore((s) => s.clear);
 
@@ -89,15 +92,18 @@ export function JawBlankStepContent() {
 
   const faceOverhang = jawBlank.face > maxFaceWidth;
 
+  const matchesVise   = visePitch != null && Math.abs(mountingHoles.spacing - visePitch) < 0.01;
+  const showVisePitch = visePitch != null && !matchesVise;
+  const calculatedScrewLength = Math.max(0, jawBlank.thickness - mountingHoles.screwheadHeight);
+
   return (
     <div className="flex flex-col gap-5 p-4 overflow-y-auto pb-20">
 
       {/* Header */}
       <div>
-        <p className="text-sm font-semibold text-foreground">Jaw Blank Stock</p>
+        <p className="text-sm font-semibold text-foreground">Jaw Design & Interface</p>
         <p className="mt-1 text-[11px] text-muted-foreground font-tech tracking-wide leading-relaxed border-l-2 border-primary/40 pl-2">
-          Define the raw aluminium stock dimensions. These are <strong>independent</strong> of the machine vise — 
-          changing the vise hardware specs does not resize these blanks.
+          Define the jaw blank envelope stock dimensions, and set up the mounting holes configuration to interface with the vise carriage.
         </p>
       </div>
 
@@ -190,12 +196,150 @@ export function JawBlankStepContent() {
         </div>
       </div>
 
+      {/* Interface (Mounting Holes) */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          Interface
+        </p>
+
+        <div className="grid gap-3">
+          {/* Screw diameter */}
+          <label
+            className="flex items-center justify-between text-xs cursor-pointer"
+            onMouseEnter={() => setHovered({ scope: 'holes', field: 'boltSize' })}
+            onMouseLeave={clearHover}
+          >
+            <span className="text-muted-foreground">Screw diameter</span>
+            <select
+              value={mountingHoles.boltSize}
+              onChange={(e) => updateMountingHoles({ boltSize: Number(e.target.value) })}
+              onFocus={() => setHovered({ scope: 'holes', field: 'boltSize' })}
+              onBlur={clearHover}
+              className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+            >
+              {BOLT_SIZES.map((s) => (
+                <option key={s} value={s}>M{s}</option>
+              ))}
+            </select>
+          </label>
+
+          {/* Screwhead height */}
+          <label
+            className="flex items-center justify-between text-xs cursor-pointer"
+            onMouseEnter={() => setHovered({ scope: 'holes', field: 'screwheadHeight' })}
+            onMouseLeave={clearHover}
+          >
+            <span className="text-muted-foreground">Screwhead height</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number" min={0} max={20} step={0.5}
+                value={mountingHoles.screwheadHeight}
+                onChange={(e) => updateMountingHoles({ screwheadHeight: parseFloat(e.target.value) || 0 })}
+                onFocus={() => setHovered({ scope: 'holes', field: 'screwheadHeight' })}
+                onBlur={clearHover}
+                className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+            </div>
+          </label>
+
+          {/* Screwhead diameter */}
+          <label
+            className="flex items-center justify-between text-xs cursor-pointer"
+            onMouseEnter={() => setHovered({ scope: 'holes', field: 'screwheadDiameter' })}
+            onMouseLeave={clearHover}
+          >
+            <span className="text-muted-foreground">Screwhead diameter</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number" min={0} max={40} step={0.5}
+                value={mountingHoles.screwheadDiameter}
+                onChange={(e) => updateMountingHoles({ screwheadDiameter: parseFloat(e.target.value) || 0 })}
+                onFocus={() => setHovered({ scope: 'holes', field: 'screwheadDiameter' })}
+                onBlur={clearHover}
+                className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+            </div>
+          </label>
+
+          {/* Holes distance */}
+          <div
+            className="flex flex-col gap-1"
+            onMouseEnter={() => setHovered({ scope: 'holes', field: 'spacing' })}
+            onMouseLeave={clearHover}
+          >
+            <label className="flex items-center justify-between text-xs cursor-pointer">
+              <span className="text-muted-foreground">Holes distance</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number" min={20} max={200} step={5}
+                  value={mountingHoles.spacing}
+                  onChange={(e) => updateMountingHoles({ spacing: parseFloat(e.target.value) || 0 })}
+                  onFocus={() => setHovered({ scope: 'holes', field: 'spacing' })}
+                  onBlur={clearHover}
+                  className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+                />
+                <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+              </div>
+            </label>
+            {matchesVise && (
+              <span className="text-[10px] text-green-600 dark:text-green-400 font-tech pl-0.5">
+                ✓ Matches vise bolt pattern ({visePitch} mm)
+              </span>
+            )}
+            {showVisePitch && (
+              <div className="flex items-center justify-between pl-0.5">
+                <span className="text-[10px] text-amber-500 font-tech">
+                  Vise pattern: {visePitch} mm — bolts won't align
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateMountingHoles({ spacing: visePitch! })}
+                  className="text-[10px] font-tech underline text-primary hover:text-primary/80"
+                >
+                  Match vise
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Holes height */}
+          <label
+            className="flex items-center justify-between text-xs cursor-pointer"
+            onMouseEnter={() => setHovered({ scope: 'holes', field: 'holesHeight' })}
+            onMouseLeave={clearHover}
+          >
+            <span className="text-muted-foreground">Holes height</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number" min={5} max={100} step={1}
+                value={mountingHoles.holesHeight}
+                onChange={(e) => updateMountingHoles({ holesHeight: parseFloat(e.target.value) || 0 })}
+                onFocus={() => setHovered({ scope: 'holes', field: 'holesHeight' })}
+                onBlur={clearHover}
+                className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+            </div>
+          </label>
+
+          {/* Calculated screw length */}
+          <div className="flex justify-between items-center text-xs pt-2 border-t border-border/30">
+            <span className="text-muted-foreground">Calculated screw length</span>
+            <span className="font-semibold font-tech text-foreground pr-5">
+              {calculatedScrewLength.toFixed(1)} mm
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Info note */}
       <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 tech-glow">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <p className="text-[11px] leading-relaxed text-muted-foreground font-tech">
-          The jaw profile cavity and grip features are configured in the next steps. 
-          <strong className="block mt-1 text-foreground">These dimensions define the raw stock only.</strong>
+          The jaw profile cavity and optional grip features are configured in the next steps. 
+          <strong className="block mt-1 text-foreground">These dimensions define the blank with interface holes.</strong>
         </p>
       </div>
     </div>

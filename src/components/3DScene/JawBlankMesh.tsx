@@ -21,10 +21,16 @@
  * was hidden inside the gap between jaws and only visible looking down it).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
+import * as THREE from 'three';
 import { Edges, Text } from '@react-three/drei';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
+import {
+  geometryCache,
+  JAW_HOLED_CACHE_KEY_LEFT,
+  JAW_HOLED_CACHE_KEY_RIGHT,
+} from '@/stores/geometryCache';
 import {
   jawBaseH,
   bracketInnerX,
@@ -54,14 +60,49 @@ const JAWS = [
 ];
 
 export function JawBlankMesh() {
-  const jawBlank   = useSoftJawsStore((s) => s.jawBlank);
-  const viseConfig = useViseStore((s) => s.viseConfig);
-  const clampGap   = useSoftJawsStore((s) => s.clampGap);
-  const activePart = useSoftJawsStore((s) => {
+  const jawBlank        = useSoftJawsStore((s) => s.jawBlank);
+  const viseConfig      = useViseStore((s) => s.viseConfig);
+  const clampGap        = useSoftJawsStore((s) => s.clampGap);
+  const holesGenerated  = useSoftJawsStore((s) => s.mountingHoles.generated);
+  const activePart      = useSoftJawsStore((s) => {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
   const { face, height, thickness, material } = jawBlank;
+
+  const leftHoledGeo = useMemo(() => {
+    if (!holesGenerated) return null;
+    const cached = geometryCache.get(JAW_HOLED_CACHE_KEY_LEFT);
+    if (!cached) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
+    geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
+    if (cached.indices) {
+      geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
+    }
+    return geo;
+  }, [holesGenerated]);
+
+  const rightHoledGeo = useMemo(() => {
+    if (!holesGenerated) return null;
+    const cached = geometryCache.get(JAW_HOLED_CACHE_KEY_RIGHT);
+    if (!cached) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
+    geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
+    if (cached.indices) {
+      geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
+    }
+    return geo;
+  }, [holesGenerated]);
+
+  // Clean up GPU memory for cached geometries
+  useEffect(() => {
+    return () => {
+      leftHoledGeo?.dispose();
+      rightHoledGeo?.dispose();
+    };
+  }, [leftHoledGeo, rightHoledGeo]);
 
   // Left jaw is fixed to the left L-bracket. Right jaw uses the shared
   // rightJawCenterX helper — same source of truth as ViseModel's bracket
@@ -90,21 +131,36 @@ export function JawBlankMesh() {
         const x       = sign * xOffset;
         const halfFace = renderFace / 2;
         const labelEps = 0.08;
+        const holedGeo = sign === -1 ? leftHoledGeo : rightHoledGeo;
 
         return (
           <group key={sign}>
 
-            {/* Soft-jaw block — raw blank, no holes until Step 6 */}
-            <mesh
-              position={[x, centerY, 0]}
-              castShadow
-              receiveShadow
-              raycast={() => {}}
-            >
-              <boxGeometry args={[thickness, height, renderFace]} />
-              <meshStandardMaterial color={color} roughness={0.90} metalness={0.30} />
-              <Edges color="#08090c" lineWidth={1} threshold={15} />
-            </mesh>
+            {holedGeo ? (
+              /* Drilled blank — using CSG geometry with baked position */
+              <mesh
+                geometry={holedGeo}
+                position={[0, 0, 0]}
+                castShadow
+                receiveShadow
+                raycast={() => {}}
+              >
+                <meshStandardMaterial color={color} roughness={0.90} metalness={0.30} />
+                <Edges color="#08090c" lineWidth={1} threshold={35} />
+              </mesh>
+            ) : (
+              /* Raw stock blank */
+              <mesh
+                position={[x, centerY, 0]}
+                castShadow
+                receiveShadow
+                raycast={() => {}}
+              >
+                <boxGeometry args={[thickness, height, renderFace]} />
+                <meshStandardMaterial color={color} roughness={0.90} metalness={0.30} />
+                <Edges color="#08090c" lineWidth={1} threshold={15} />
+              </mesh>
+            )}
 
             {/* ── Laser-etched ID label — top-outer corner of each ±Z face ── */}
             {[1, -1].map((zSide) => (

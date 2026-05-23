@@ -48,13 +48,7 @@ export const STEP_CONFIG: Record<SoftJawsWorkflowStep, StepMeta> = {
     helpText: 'Configure grip patterns to improve part holding force.',
     skippable: true,
   },
-  'mounting-holes': {
-    label: 'Mounting Holes',
-    shortLabel: 'Holes',
-    description: 'Configure bolt holes for chuck/vise mounting',
-    helpText: 'Add the bolt pattern to mount the jaw to your workholding device.',
-    skippable: false,
-  },
+
   export: {
     label: 'Export',
     shortLabel: 'Export',

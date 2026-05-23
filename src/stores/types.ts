@@ -73,8 +73,11 @@ export interface GripFeaturesConfig {
 
 export interface MountingHolesConfig {
   pattern: 'standard' | 'custom';
-  boltSize: number;
-  spacing: number;
+  boltSize: number; // Screw diameter
+  screwheadHeight: number; // Screwhead height
+  screwheadDiameter: number; // Screwhead diameter
+  spacing: number; // Holes distance
+  holesHeight: number; // Holes height
   count: number;
   /** True once the hole CSG has populated JAW_HOLED_CACHE_KEY_{LEFT,RIGHT}. */
   generated: boolean;

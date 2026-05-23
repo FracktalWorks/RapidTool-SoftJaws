@@ -81,7 +81,7 @@ export function useExport(): UseExportReturn {
         ] as const;
 
         for (const { label, holedKey, profileKey } of sides) {
-          const cached = geometryCache.get(holedKey) ?? geometryCache.get(profileKey);
+          const cached = geometryCache.get(profileKey) ?? geometryCache.get(holedKey);
           const mesh   = cached
             ? cachedToMesh(cached)
             : buildBlankMesh(jawBlank.thickness, jawBlank.height, jawBlank.face);

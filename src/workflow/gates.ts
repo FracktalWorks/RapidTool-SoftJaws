@@ -41,7 +41,6 @@ export function getStepGate(
         : { allowed: false, reason: 'Import a part first.' };
 
     case 'grip-features':
-    case 'mounting-holes':
       return inputs.profileGenerated
         ? ALLOWED
         : { allowed: false, reason: 'Generate the jaw profile first.' };

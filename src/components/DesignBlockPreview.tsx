@@ -53,10 +53,11 @@ const JAW_MATERIAL  = { color: '#9099a3', roughness: 0.55, metalness: 0.25 };
 // ─── Resolution: hover state → box geometry + axis ───────────────────────────
 
 function resolve(
-  hovered:    ReturnType<typeof useDimensionHoverStore.getState>['hovered'],
-  viseConfig: ReturnType<typeof useViseStore.getState>['viseConfig'],
-  jawBlank:   ReturnType<typeof useSoftJawsStore.getState>['jawBlank'],
-  jawProfile: ReturnType<typeof useSoftJawsStore.getState>['jawProfile'],
+  hovered:       ReturnType<typeof useDimensionHoverStore.getState>['hovered'],
+  viseConfig:    ReturnType<typeof useViseStore.getState>['viseConfig'],
+  jawBlank:      ReturnType<typeof useSoftJawsStore.getState>['jawBlank'],
+  jawProfile:    ReturnType<typeof useSoftJawsStore.getState>['jawProfile'],
+  mountingHoles: ReturnType<typeof useSoftJawsStore.getState>['mountingHoles'],
 ): Resolved | null {
   if (!hovered) return null;
 
@@ -110,6 +111,66 @@ function resolve(
         material: JAW_MATERIAL,
         partialLength: jawProfile.depth,
       };
+    }
+  }
+
+  if (hovered.scope === 'holes') {
+    const boxDims: [number, number, number] = [
+      jawBlank.thickness,   // R3F X = Trinckle X
+      jawBlank.height,      // R3F Y = Trinckle Z
+      jawBlank.face,        // R3F Z = Trinckle Y
+    ];
+    switch (hovered.field) {
+      case 'boltSize':
+        return {
+          boxDims,
+          axis: 'y',
+          arrowR3F: 'z',
+          value: mountingHoles.boltSize,
+          label: 'Screw diameter',
+          material: JAW_MATERIAL,
+          partialLength: mountingHoles.boltSize,
+        };
+      case 'screwheadHeight':
+        return {
+          boxDims,
+          axis: 'x',
+          arrowR3F: 'x',
+          value: mountingHoles.screwheadHeight,
+          label: 'Screwhead height',
+          material: JAW_MATERIAL,
+          partialLength: mountingHoles.screwheadHeight,
+        };
+      case 'screwheadDiameter':
+        return {
+          boxDims,
+          axis: 'y',
+          arrowR3F: 'z',
+          value: mountingHoles.screwheadDiameter,
+          label: 'Screwhead diameter',
+          material: JAW_MATERIAL,
+          partialLength: mountingHoles.screwheadDiameter,
+        };
+      case 'spacing':
+        return {
+          boxDims,
+          axis: 'y',
+          arrowR3F: 'z',
+          value: mountingHoles.spacing,
+          label: 'Holes distance',
+          material: JAW_MATERIAL,
+          partialLength: mountingHoles.spacing,
+        };
+      case 'holesHeight':
+        return {
+          boxDims,
+          axis: 'z',
+          arrowR3F: 'y',
+          value: mountingHoles.holesHeight,
+          label: 'Holes height',
+          material: JAW_MATERIAL,
+          partialLength: mountingHoles.holesHeight,
+        };
     }
   }
 
@@ -267,17 +328,218 @@ function FramedCamera({ maxDim }: { maxDim: number }) {
   );
 }
 
+interface HolesPreviewDiagramProps {
+  field: string;
+  mountingHoles: ReturnType<typeof useSoftJawsStore.getState>['mountingHoles'];
+}
+
+function HolesPreviewDiagram({ field, mountingHoles }: HolesPreviewDiagramProps) {
+  const highlightColor = '#0ea5e9'; // sky-500
+  const isBoltSize = field === 'boltSize';
+  const isScrewheadHeight = field === 'screwheadHeight';
+  const isScrewheadDiameter = field === 'screwheadDiameter';
+  const isSpacing = field === 'spacing';
+  const isHolesHeight = field === 'holesHeight';
+
+  return (
+    <svg viewBox="0 0 300 240" className="w-full h-full text-card-foreground select-none font-tech">
+      <defs>
+        {/* Shading for the screw shafts */}
+        <linearGradient id="holeShading" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#94a3b8" />
+          <stop offset="50%" stopColor="#f1f5f9" />
+          <stop offset="100%" stopColor="#94a3b8" />
+        </linearGradient>
+        {/* Shading for the screw heads */}
+        <linearGradient id="cbShading" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#475569" />
+          <stop offset="50%" stopColor="#cbd5e1" />
+          <stop offset="100%" stopColor="#475569" />
+        </linearGradient>
+        {/* Define arrow markers */}
+        <marker
+          id="arrow-start"
+          viewBox="0 0 10 10"
+          refX="0"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M 10 0 L 0 5 L 10 10 z" fill={highlightColor} />
+        </marker>
+        <marker
+          id="arrow-end"
+          viewBox="0 0 10 10"
+          refX="10"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill={highlightColor} />
+        </marker>
+      </defs>
+
+      {/* ────────────────── TOP DIAGRAM: CROSS SECTION ────────────────── */}
+      {/* Background cylinders (representing the holes in cross section) */}
+      <rect x="93" y="30" width="14" height="28" fill="url(#holeShading)" />
+      <rect x="86" y="58" width="28" height="12" fill="url(#cbShading)" />
+
+      <rect x="193" y="30" width="14" height="28" fill="url(#holeShading)" />
+      <rect x="186" y="58" width="28" height="12" fill="url(#cbShading)" />
+
+      {/* Jaw Material pieces (split by holes) */}
+      {/* Left Piece */}
+      <path
+        d="M 50 30 L 93 30 L 93 58 L 86 58 L 86 70 L 50 70 Z"
+        fill="#f8fafc"
+        stroke="#334155"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* Middle Piece */}
+      <path
+        d="M 107 30 L 193 30 L 193 58 L 186 58 L 186 70 L 114 70 L 114 58 L 107 58 Z"
+        fill="#f8fafc"
+        stroke="#334155"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* Right Piece */}
+      <path
+        d="M 207 30 L 250 30 L 250 70 L 214 70 L 214 58 L 207 58 Z"
+        fill="#f8fafc"
+        stroke="#334155"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* Dimension overlays for Top Diagram */}
+      {/* 1. Screw diameter (boltSize) */}
+      {isBoltSize && (
+        <g>
+          <line x1="93" y1="30" x2="93" y2="15" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="107" y1="30" x2="107" y2="15" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="75" y1="18" x2="93" y2="18" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <line x1="125" y1="18" x2="107" y2="18" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <text x="100" y="12" fill={highlightColor} fontSize="9" textAnchor="middle" fontWeight="bold">
+            M{mountingHoles.boltSize}
+          </text>
+        </g>
+      )}
+
+      {/* 2. Screwhead height (screwheadHeight) */}
+      {isScrewheadHeight && (
+        <g>
+          <line x1="86" y1="58" x2="68" y2="58" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="86" y1="70" x2="68" y2="70" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="72" y1="48" x2="72" y2="58" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <line x1="72" y1="80" x2="72" y2="70" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <text x="63" y="67" fill={highlightColor} fontSize="9" textAnchor="end" fontWeight="bold">
+            {mountingHoles.screwheadHeight.toFixed(1)}
+          </text>
+        </g>
+      )}
+
+      {/* 3. Screwhead diameter (screwheadDiameter) */}
+      {isScrewheadDiameter && (
+        <g>
+          <line x1="86" y1="70" x2="86" y2="85" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="114" y1="70" x2="114" y2="85" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="70" y1="81" x2="86" y2="81" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <line x1="130" y1="81" x2="114" y2="81" stroke={highlightColor} strokeWidth="1.5" markerEnd="url(#arrow-end)" />
+          <text x="100" y="92" fill={highlightColor} fontSize="9" textAnchor="middle" fontWeight="bold">
+            Ø{mountingHoles.screwheadDiameter.toFixed(1)}
+          </text>
+        </g>
+      )}
+
+
+      {/* ────────────────── BOTTOM DIAGRAM: FRONT VIEW ────────────────── */}
+      {/* Front Face Panel */}
+      <rect
+        x="50"
+        y="120"
+        width="200"
+        height="80"
+        fill="#f1f5f9"
+        stroke="#334155"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* Left Hole Concentric Circles */}
+      <circle cx="100" cy="160" r="14" fill="none" stroke="#475569" strokeWidth="1" />
+      <circle cx="100" cy="160" r="7" fill="#cbd5e1" stroke="#475569" strokeWidth="1" />
+      <line x1="100" y1="142" x2="100" y2="178" stroke="#0ea5e9" strokeWidth="0.75" strokeOpacity="0.8" />
+      <line x1="82" y1="160" x2="118" y2="160" stroke="#0ea5e9" strokeWidth="0.75" strokeOpacity="0.8" />
+
+      {/* Right Hole Concentric Circles */}
+      <circle cx="200" cy="160" r="14" fill="none" stroke="#475569" strokeWidth="1" />
+      <circle cx="200" cy="160" r="7" fill="#cbd5e1" stroke="#475569" strokeWidth="1" />
+      <line x1="200" y1="142" x2="200" y2="178" stroke="#0ea5e9" strokeWidth="0.75" strokeOpacity="0.8" />
+      <line x1="182" y1="160" x2="218" y2="160" stroke="#0ea5e9" strokeWidth="0.75" strokeOpacity="0.8" />
+
+
+      {/* Dimension overlays for Bottom Diagram */}
+      {/* 4. Holes distance (spacing) */}
+      {isSpacing && (
+        <g>
+          <line x1="100" y1="160" x2="100" y2="225" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="200" y1="160" x2="200" y2="225" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line
+            x1="100"
+            y1="220"
+            x2="200"
+            y2="220"
+            stroke={highlightColor}
+            strokeWidth="1.5"
+            markerStart="url(#arrow-start)"
+            markerEnd="url(#arrow-end)"
+          />
+          <text x="150" y="215" fill={highlightColor} fontSize="10" textAnchor="middle" fontWeight="bold">
+            {mountingHoles.spacing.toFixed(1)} mm
+          </text>
+        </g>
+      )}
+
+      {/* 5. Holes height (holesHeight) */}
+      {isHolesHeight && (
+        <g>
+          <line x1="100" y1="160" x2="35" y2="160" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line x1="50" y1="200" x2="35" y2="200" stroke={highlightColor} strokeWidth="1" strokeDasharray="2,2" />
+          <line
+            x1="40"
+            y1="160"
+            x2="40"
+            y2="200"
+            stroke={highlightColor}
+            strokeWidth="1.5"
+            markerStart="url(#arrow-start)"
+            markerEnd="url(#arrow-end)"
+          />
+          <text x="30" y="184" fill={highlightColor} fontSize="9" textAnchor="end" fontWeight="bold">
+            {mountingHoles.holesHeight.toFixed(1)}
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
 // ─── Card wrapper ────────────────────────────────────────────────────────────
 
 export function DesignBlockPreview() {
-  const hovered    = useDimensionHoverStore((s) => s.hovered);
-  const viseConfig = useViseStore((s) => s.viseConfig);
-  const jawBlank   = useSoftJawsStore((s) => s.jawBlank);
-  const jawProfile = useSoftJawsStore((s) => s.jawProfile);
+  const hovered       = useDimensionHoverStore((s) => s.hovered);
+  const viseConfig    = useViseStore((s) => s.viseConfig);
+  const jawBlank      = useSoftJawsStore((s) => s.jawBlank);
+  const jawProfile    = useSoftJawsStore((s) => s.jawProfile);
+  const mountingHoles = useSoftJawsStore((s) => s.mountingHoles);
 
   const resolved = useMemo(
-    () => resolve(hovered, viseConfig, jawBlank, jawProfile),
-    [hovered, viseConfig, jawBlank, jawProfile],
+    () => resolve(hovered, viseConfig, jawBlank, jawProfile, mountingHoles),
+    [hovered, viseConfig, jawBlank, jawProfile, mountingHoles],
   );
 
   if (!resolved) return null;
@@ -285,42 +547,47 @@ export function DesignBlockPreview() {
   const { boxDims, axis, arrowR3F, value, label, material, partialLength } = resolved;
   const maxDim    = Math.max(...boxDims);
   const triadSize = maxDim * 0.30;
+  const isHolesScope = hovered?.scope === 'holes';
 
   // Layout offsets: toolbar (56px) + context panel (320px) = 376px sidebar.
   // Leave a small gap so the card floats clear of the panel border.
   return (
     <div className="fixed left-[26rem] top-1/2 -translate-y-1/2 z-40 pointer-events-none select-none">
       <div className="w-[320px] rounded-lg border border-border/60 bg-background/95 shadow-xl backdrop-blur-md overflow-hidden">
-        <div className="h-[280px] bg-gradient-to-br from-muted/40 to-background">
-          <Canvas gl={{ antialias: true, alpha: true }}>
-            <FramedCamera maxDim={maxDim} />
-            <ambientLight intensity={0.75} />
-            <directionalLight position={[10, 15, 8]} intensity={0.7} />
-            <directionalLight position={[-8, 4, -5]} intensity={0.3} />
+        <div className="h-[280px] bg-gradient-to-br from-muted/40 to-background flex items-center justify-center p-2">
+          {isHolesScope ? (
+            <HolesPreviewDiagram field={hovered.field} mountingHoles={mountingHoles} />
+          ) : (
+            <Canvas gl={{ antialias: true, alpha: true }}>
+              <FramedCamera maxDim={maxDim} />
+              <ambientLight intensity={0.75} />
+              <directionalLight position={[10, 15, 8]} intensity={0.7} />
+              <directionalLight position={[-8, 4, -5]} intensity={0.3} />
 
-            {/* The artefact — vise envelope (light steel) or jaw blank (forged) */}
-            <mesh>
-              <boxGeometry args={boxDims} />
-              <meshStandardMaterial
-                color={material.color}
-                roughness={material.roughness}
-                metalness={material.metalness}
+              {/* The artefact — vise envelope (light steel) or jaw blank (forged) */}
+              <mesh>
+                <boxGeometry args={boxDims} />
+                <meshStandardMaterial
+                  color={material.color}
+                  roughness={material.roughness}
+                  metalness={material.metalness}
+                />
+              </mesh>
+
+              {/* Highlighted dimension */}
+              <DimensionArrow
+                boxDims={boxDims}
+                arrowR3F={arrowR3F}
+                color={AXIS_COLORS[axis]}
+                partialLength={partialLength}
               />
-            </mesh>
 
-            {/* Highlighted dimension */}
-            <DimensionArrow
-              boxDims={boxDims}
-              arrowR3F={arrowR3F}
-              color={AXIS_COLORS[axis]}
-              partialLength={partialLength}
-            />
-
-            {/* World-axis triad in the negative-corner of the view */}
-            <group position={[-maxDim * 0.7, -maxDim * 0.55, -maxDim * 0.7]}>
-              <AxisTriad size={triadSize} />
-            </group>
-          </Canvas>
+              {/* World-axis triad in the negative-corner of the view */}
+              <group position={[-maxDim * 0.7, -maxDim * 0.55, -maxDim * 0.7]}>
+                <AxisTriad size={triadSize} />
+              </group>
+            </Canvas>
+          )}
         </div>
         <div className="border-t border-border/50 px-3 py-2.5 text-center text-xs font-tech">
           <span className={`font-semibold ${AXIS_TEXT_CLASS[axis]}`}>{label}</span>

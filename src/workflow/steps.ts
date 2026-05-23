@@ -4,7 +4,6 @@ export const SOFTJAWS_WORKFLOW_STEPS = [
   'jaw-blank',
   'jaw-profile',
   'grip-features',
-  'mounting-holes',
   'export',
 ] as const;
 
