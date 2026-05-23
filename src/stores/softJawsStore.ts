@@ -28,8 +28,8 @@ const INITIAL_STATE: SoftJawsState = {
     material: 'aluminum-6061',
   },
   jawProfile: {
-    clearance: 0.1,
-    depth: 20,
+    clearance: 0.2,
+    depth: 5,
     generated: false,
   },
   gripFeatures: {
@@ -108,9 +108,27 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
         set((state) => {
           const part = state.parts.find((p) => p.id === id);
           if (!part) return;
+
+          // Snapshot BEFORE mutation for change detection.
+          const px = part.transform.position.x, py = part.transform.position.y, pz = part.transform.position.z;
+          const rx = part.transform.rotation.x, ry = part.transform.rotation.y, rz = part.transform.rotation.z;
+
           if (transform.position) Object.assign(part.transform.position, transform.position);
           if (transform.rotation) Object.assign(part.transform.rotation, transform.rotation);
-          state.jawProfile.generated = false;
+
+          // Only invalidate the jaw profile when the part actually moved — not on
+          // the bake-back call that SelectableTransformControls fires on gizmo close
+          // with the same world position (which would erase a freshly generated profile).
+          const EPS = 0.001;
+          const moved =
+            Math.abs(part.transform.position.x - px) > EPS ||
+            Math.abs(part.transform.position.y - py) > EPS ||
+            Math.abs(part.transform.position.z - pz) > EPS ||
+            Math.abs(part.transform.rotation.x - rx) > EPS ||
+            Math.abs(part.transform.rotation.y - ry) > EPS ||
+            Math.abs(part.transform.rotation.z - rz) > EPS;
+
+          if (moved) state.jawProfile.generated = false;
         }),
 
       updateJawBlank: (config) =>

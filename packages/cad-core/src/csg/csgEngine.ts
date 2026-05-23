@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SUBTRACTION, Brush, Evaluator } from 'three-bvh-csg';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export interface CSGOperation {
   type: 'union' | 'subtract' | 'intersect';
@@ -43,17 +44,55 @@ export class CSGEngine {
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
   }
 
+  // STL parsers emit NON-INDEXED geometry — each face owns its own 3 unique
+  // vertices, with the face-flat normal copied to each. That is fine for
+  // rendering but catastrophic for CSG:
+  //
+  //   • `computeVertexNormals` on a non-indexed mesh re-assigns each vertex
+  //     the normal of its single owning face. Two faces that meet at an
+  //     edge have duplicated vertices, each pointing along its OWN face
+  //     normal. Any subsequent offset (clearance inflation) pushes each
+  //     duplicate along a DIFFERENT direction, tearing the mesh apart along
+  //     every shared edge. The cutter becomes non-manifold and three-bvh-csg
+  //     emits long diagonal cap-sheet triangulations across the result —
+  //     the "blast cut" artifact visible in the 2026-05-19 screenshots.
+  //
+  //   • Even without inflation, a non-indexed mesh has duplicate vertex
+  //     records at every seam. three-bvh-csg builds its BVH from those
+  //     verts and can produce sliver artifacts where adjacent faces almost
+  //     but don't quite share a vertex due to float-equality.
+  //
+  // `mergeVertices(geo, tol)` welds positions within `tol` mm of each other
+  // into a single indexed vertex, restoring the manifold representation.
+  // We weld AFTER applying the world transform so the tolerance is in world
+  // (mm) units — a 0.01 mm tolerance is well below CNC accuracy and safely
+  // above floating-point noise.
   private cloneWorldGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
-    const geo = mesh.geometry.clone();
+    let geo = mesh.geometry.clone();
     const m = mesh.matrixWorld.clone();
     geo.applyMatrix4(m);
+    if (!geo.getIndex()) {
+      geo = mergeVertices(geo, 1e-5);
+      geo.computeVertexNormals();
+    }
     this.ensureUVs(geo);
     return geo;
   }
 
+  // Inflate the mesh along its per-vertex normals.
+  //
+  // CRITICAL: this only produces a manifold result on INDEXED geometry where
+  // shared edges have a single vertex with an averaged normal. Non-indexed
+  // input (raw STL) tears along every edge — see cloneWorldGeometry for the
+  // full explanation. We weld in cloneWorldGeometry, so by the time this
+  // runs the geometry is indexed and computeVertexNormals averages normals
+  // at each shared vertex.
   private inflateGeometry(geometry: THREE.BufferGeometry, offset: number): THREE.BufferGeometry {
     if (!offset) return geometry;
-    const geo = geometry.clone();
+    let geo = geometry.clone();
+    if (!geo.getIndex()) {
+      geo = mergeVertices(geo, 1e-5);
+    }
     geo.computeVertexNormals();
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
@@ -61,7 +100,7 @@ export class CSGEngine {
     const nArr = nor.array as Float32Array;
     for (let i = 0; i < pos.count; i++) {
       const ix = i * 3;
-      arr[ix] += nArr[ix] * offset;
+      arr[ix]     += nArr[ix]     * offset;
       arr[ix + 1] += nArr[ix + 1] * offset;
       arr[ix + 2] += nArr[ix + 2] * offset;
     }
@@ -97,40 +136,33 @@ export class CSGEngine {
     return 0;
   }
 
-  // Build the set of brushes representing the swept volume for a single tool geometry.
-  // We approximate the sweep by sampling multiple translated copies of the (inflated) tool
-  // along the removal direction up to the specified depth. This is still an approximation,
-  // but using several segments makes the subtraction much more precise than a single
-  // start/end pair, while keeping the number of CSG evaluations bounded.
+  // Single cutter brush translated `depth` into the removal direction.
+  //
+  // Why one brush, not a sweep of N copies:
+  //   • The start-position brush (t=0) sits with its leading face coincident
+  //     with the jaw inner face (only clampGap of penetration). three-bvh-csg
+  //     cannot classify in/out on coincident faces and emits long diagonal
+  //     cap sheets across the jaw — the "blast cut" artifact.
+  //   • Two interpenetrating copies of the same part (depth ≪ part X-extent)
+  //     produce overlapping subtractions; the second cut hits geometry the
+  //     first one already exposed, generating more sliver caps.
+  //
+  // A single brush translated fully into the jaw avoids both: no coincident
+  // face, no overlapping subtractions, one BVH build instead of N. The
+  // resulting pocket walls follow the part's silhouette at the cut depth —
+  // for typical fixture geometry (uniformly extruded profiles) this is
+  // indistinguishable from a true sweep; for tapered parts the pocket bottom
+  // follows the part profile at depth, which is what soft jaws want.
   private buildSweptBrushes(toolGeo: THREE.BufferGeometry, dir: THREE.Vector3, depth: number): Brush[] {
-    const brushes: Brush[] = [];
-
-    // Always normalize direction so depth is in mm units
-    const nDir = dir.clone().normalize();
-
-    // No sweep: just use the base tool
     if (depth <= 0) {
-      brushes.push(new Brush(toolGeo));
-      return brushes;
+      return [new Brush(toolGeo)];
     }
 
-    // Choose a small, bounded number of segments so we don't explode CSG cost.
-    // With the local trim band (typically ~2 mm) even a coarser sampling still
-    // produces a precise result while greatly reducing the amount of CSG work.
-    const maxSegments = 8;
-    const minSegmentLength = 0.5; // mm
-    const approxSegments = Math.ceil(depth / minSegmentLength);
-    const segments = Math.max(1, Math.min(maxSegments, approxSegments));
-
-    for (let i = 0; i <= segments; i++) {
-      const t = (depth * i) / segments;
-      const sweep = toolGeo.clone();
-      const shift = new THREE.Matrix4().makeTranslation(nDir.x * t, nDir.y * t, nDir.z * t);
-      sweep.applyMatrix4(shift);
-      brushes.push(new Brush(sweep));
-    }
-
-    return brushes;
+    const nDir = dir.clone().normalize();
+    const sweep = toolGeo.clone();
+    const shift = new THREE.Matrix4().makeTranslation(nDir.x * depth, nDir.y * depth, nDir.z * depth);
+    sweep.applyMatrix4(shift);
+    return [new Brush(sweep)];
   }
 
   /**
@@ -180,8 +212,12 @@ export class CSGEngine {
         });
       });
     } catch (error) {
-      console.error('CSGEngine.createNegativeSpace failed, returning original base mesh:', error);
-      return baseMesh.clone();
+      // Previously this swallowed the failure and returned the unchanged
+      // blank as if the cut had succeeded — masking real CSG/BVH failures
+      // and producing silent "no-op" profiles in the cache. Re-throw so the
+      // caller (worker → useJawProfile → UI) surfaces a real error to the user.
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`CSG failed: ${message}`);
     }
 
     const resultGeometryWorld = resultBrush.geometry;

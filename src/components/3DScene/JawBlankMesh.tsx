@@ -30,7 +30,7 @@ import {
   bracketInnerX,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX } from '@/utils/partGeometry';
+import { rightJawCenterX } from '@/utils/partGeometry';
 
 // Dark soft-jaw palette — reads as forged steel against the light vise body.
 const MATERIAL_COLORS: Record<string, string> = {
@@ -63,28 +63,19 @@ export function JawBlankMesh() {
   });
   const { face, height, thickness, material } = jawBlank;
 
-  // Left jaw is fixed to the left L-bracket. Right jaw is bolted to the
-  // movable right L-bracket carriage — its X must match ViseModel's rightInnerX
-  // formula so the jaw and carriage move together as one rigid assembly.
+  // Left jaw is fixed to the left L-bracket. Right jaw uses the shared
+  // rightJawCenterX helper — same source of truth as ViseModel's bracket
+  // carriage AND useJawProfile's CSG bake position. No drift possible.
   const { centerY, leftXOff, rightXOff, renderFace, labelSize } = useMemo(() => {
     const baseY     = jawBaseH(viseConfig.jawHeight);
     const innerX    = bracketInnerX(viseConfig);
     const maxFace   = pillarFaceWidth(viseConfig);
     const fixedXOff = innerX - thickness / 2;
 
-    const rightXOff = activePart
-      ? (() => {
-          const worldWidth    = computeWorldSpanX(activePart);
-          const leftFaceX     = -innerX + thickness;
-          const partRightEdge = leftFaceX + clampGap + worldWidth;
-          return Math.min(fixedXOff, partRightEdge + clampGap + thickness / 2);
-        })()
-      : fixedXOff;
-
     return {
       centerY:    baseY + height / 2,
       leftXOff:   fixedXOff,
-      rightXOff,
+      rightXOff:  rightJawCenterX(viseConfig, jawBlank, activePart, clampGap),
       renderFace: Math.min(face, maxFace * 0.98),
       labelSize:  height * 0.09,
     };

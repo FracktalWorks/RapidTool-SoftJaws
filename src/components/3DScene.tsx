@@ -23,6 +23,8 @@ import { JawBlankMesh } from './3DScene/JawBlankMesh';
 import { JawProfileMesh } from './3DScene/JawProfileMesh';
 import { PartMeshes } from './3DScene/PartMeshes';
 import { PillarBoltDecals } from './3DScene/PillarBoltDecals';
+import { JawBoltDecorations } from './3DScene/JawBoltDecorations';
+import { CavityPreview } from './3DScene/CavityPreview';
 
 /** Offline-safe lighting fallback — matches warehouse HDRI tone */
 function OfflineLighting() {
@@ -79,9 +81,19 @@ export function Scene3D() {
         */}
       {profileReady ? <JawProfileMesh /> : <JawBlankMesh />}
 
-      {/* Visible exit-hole decals on pillar back faces — no-op until
-          mounting holes have been drilled. */}
+      {/* Bracket back-face bolt-exit decoration — factory hardware,
+          always visible from frame 1. */}
       <PillarBoltDecals />
+
+      {/* Jaw inner-face counterbore preview — shows where Step-6 CSG will
+          drill the mounting holes. Hides itself once the real holes are
+          in the JAW_HOLED cache (the geometry then carries the holes). */}
+      <JawBoltDecorations />
+
+      {/* Step-4 cavity preview — translucent ghost of the workpiece swept
+          into each jaw by `pocket depth`. Hides itself once the profile
+          CSG has run (JawProfileMesh then renders the real cavity). */}
+      <CavityPreview />
 
       {/* Imported workpiece meshes */}
       <PartMeshes />

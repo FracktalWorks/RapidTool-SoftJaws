@@ -2,35 +2,41 @@
 
 Browser-based CAD app for designing CNC soft-jaw inserts. Imports an STL workpiece → generates two soft jaws with cavities matching the part → exports as STL for machining.
 
-This file is a **supplement** to the authoritative project docs listed below — auto-loaded into every Claude Code conversation (including subagents). Read it for the recent invariants and the things that have already shipped to prod twice when broken. For project structure, three-layer rules, and step-by-step workflow scaffolding, defer to the `.github/instructions/` files.
+Three-layer monorepo:
+
+```
+src/                      ← soft-jaw domain (jaws, vise, parts, workflow)
+packages/cad-ui/          ← generic React UI (layout, primitives, branding)
+packages/cad-core/        ← pure algorithms (CSG, STL, geometry math)
+```
+
+This file is loaded into **every** session, including subagents. Keep it lean — directory-specific rules live in the per-folder `CLAUDE.md` files below, which Claude additively loads when you work inside them.
 
 ---
 
-## Authoritative reading order — every task
+## Where to find what
 
-1. **This file** (CLAUDE.md) — recent invariants, magic-number rules, perf non-negotiables
-2. **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — three-layer rule, pre-implementation checklist
-3. **[.github/instructions/architecture.instructions.md](.github/instructions/architecture.instructions.md)** — layer-placement decision tree, allowed/forbidden imports
-4. **[.github/instructions/layer-placement.instructions.md](.github/instructions/layer-placement.instructions.md)** — quick decision reference per file type
-5. **[.github/instructions/cad-ui-integration.instructions.md](.github/instructions/cad-ui-integration.instructions.md)** — cad-ui component APIs, store APIs
-6. **[.github/instructions/workflow-implementation.instructions.md](.github/instructions/workflow-implementation.instructions.md)** — 7-step workflow scaffolding pattern
-7. **[.github/agents/softjaws-architect.agent.md](.github/agents/softjaws-architect.agent.md)** — the deeper architect spec (Copilot format; same intent as `.claude/agents/`)
-8. **[PROGRESS.md](PROGRESS.md)** — status table, P0–P3 priority order, tech-debt list (NB: field-name section is stale, see "Stale doc warnings" below)
-9. **[memories/repo/architecture-state.md](memories/repo/architecture-state.md)** — known issues + 7-point refactoring plan
-
-If a rule below conflicts with one of those files, the **other file wins** — they are authoritative for project structure. This file is authoritative only for the recent SoftJaws-specific invariants below.
+| File | When it loads | What it covers |
+|---|---|---|
+| `CLAUDE.md` (this file) | Every session | Axis convention, the two invariants, commands, house style, stale-doc warnings |
+| `src/CLAUDE.md` | Working anywhere in `src/` | Layer-placement decision, dependency direction, feature shape, hot path, perf rules, store rules |
+| `src/features/CLAUDE.md` | Working in a workflow step | The seven steps, mandatory feature shape, step-content + CSG-hook patterns, registration |
+| `packages/cad-ui/CLAUDE.md` | Editing the cad-ui package | What belongs / doesn't belong in cad-ui, generic-stores API, forbidden imports |
+| `packages/cad-core/CLAUDE.md` | Editing the cad-core package | "No React, no DOM, no domain" rules, worker pattern, result contract |
+| `PROGRESS.md` | Look up before claiming a step is done | Authoritative status of all seven workflow steps, current priority list, known issues |
+| `.github/instructions/*.md` | Copilot only | Same rules in GitHub Copilot's frontmatter format. Don't edit these; edit the matching `CLAUDE.md` and let them drift if Copilot users don't care. |
 
 ---
 
 ## Axis convention — get this wrong and every visual silently breaks
 
-The rendered scene is Three.js Y-up. (CAD-coordinate import goes through cad-core's `toThreePosition` / `cadToThreeAxis` — that's a separate concern.)
+Rendered scene is Three.js Y-up. CAD-coordinate import is handled by `parseSTL` (Z-up → Y-up rotation baked in at parse time).
 
-| Axis | Meaning                                                  |
-|:----:|----------------------------------------------------------|
-| X    | Clamping direction — jaws move along X                   |
-| Y    | Vertical — gravity, jaw height, rail surface             |
-| Z    | Along the jaw face — jaw width                           |
+| Axis | Meaning |
+|:---:|---|
+| X | Clamping direction — jaws move along X |
+| Y | Vertical — gravity, jaw height, rail surface |
+| Z | Along the jaw face — jaw width |
 
 `JawBlankConfig` fields are axis-named to enforce this:
 - `thickness` → X
@@ -41,127 +47,49 @@ If you ever write `position={[face, height, thickness]}` you have already shippe
 
 ---
 
-## Single source of truth: vise geometry
-
-All vise dimensions derive from `viseConfig.{jawWidth, jawHeight, jawStroke}`. Helpers live in [src/features/vise-config/data/presets.ts](src/features/vise-config/data/presets.ts):
-
-```ts
-viseBodyLen(viseConfig)       // total body length along X
-bracketFootLen(viseConfig)    // L-bracket horizontal foot length
-bracketInnerX(viseConfig)     // pillar inner face X — soft jaw outer face abuts here
-pillarFaceWidth(viseConfig)   // pillar Z width — caps practical jaw face
-jawBaseH(jawHeight)           // Y of rail surface (where blanks/parts sit)
-```
-
-**Rule: never inline `0.92`, `0.11`, `0.045`, `0.68`, `0.55`, `0.42`, `0.96`, `0.30` etc. anywhere outside `presets.ts` and `ViseModel.tsx`.** If you need a vise dimension elsewhere, route through a helper. If a helper doesn't exist, add one — do not duplicate the formula.
-
----
-
 ## Two invariants — break either and the system silently corrupts output
 
 ### Invariant 1 — xOffset coupling
 
-The soft-jaw render position MUST equal the CSG bake position MUST equal the camera-fit position. All three derive from the same formula:
+The right soft-jaw render position MUST equal the right L-bracket carriage position MUST equal the CSG bake position. All three derive from one helper:
 
 ```ts
-const xOffset = bracketInnerX(viseConfig) - jawBlank.thickness / 2;
+rightJawCenterX(viseConfig, jawBlank, activePart, clampGap)   // src/utils/partGeometry.ts
+rightBracketInnerX(viseConfig, jawBlank, activePart, clampGap) // same file
 ```
 
-| File                                                                                 | Role                       |
-|--------------------------------------------------------------------------------------|----------------------------|
-| [src/components/3DScene/JawBlankMesh.tsx](src/components/3DScene/JawBlankMesh.tsx)   | render position            |
-| [src/features/jaw-profile/hooks/useJawProfile.ts](src/features/jaw-profile/hooks/useJawProfile.ts) | CSG bake (matrixWorld)     |
-| [src/components/3DScene/CameraController.tsx](src/components/3DScene/CameraController.tsx) | scene bbox for camera fit  |
+Consumers (all must read from the same helper, never from a local copy):
 
-If you change one, change all three in the same commit. Always.
+| File | Role |
+|---|---|
+| [src/components/3DScene/JawBlankMesh.tsx](src/components/3DScene/JawBlankMesh.tsx) | Render position of the right jaw blank |
+| [src/components/3DScene/ViseModel.tsx](src/components/3DScene/ViseModel.tsx) | Render position of the right L-bracket carriage |
+| [src/components/3DScene/PillarBoltDecals.tsx](src/components/3DScene/PillarBoltDecals.tsx) | Bolt-exit decals on the moved bracket back face |
+| [src/features/jaw-profile/hooks/useJawProfile.ts](src/features/jaw-profile/hooks/useJawProfile.ts) | CSG bake (matrixWorld) for the right blank |
+| [src/components/3DScene/CameraController.tsx](src/components/3DScene/CameraController.tsx) | Scene bbox for camera fit |
 
 ### Invariant 2 — geometry-cache lifecycle
 
-Three.js Float32Arrays cannot live in Zustand (non-serializable). They live in `geometryCache: Map<string, CachedGeometry>` (module-level, [src/stores/geometryCache.ts](src/stores/geometryCache.ts)). The store holds metadata only.
+Three.js `Float32Array`s cannot live in Zustand (non-serialisable). They live in `geometryCache: Map<string, CachedGeometry>` (module-level, [src/stores/geometryCache.ts](src/stores/geometryCache.ts)). The store holds metadata only.
 
-- Every `addPart` MUST be paired with `geometryCache.set(part.id, geo)` — see [useImport.ts](src/features/import/hooks/useImport.ts).
-- Every `removePart` MUST be paired with `geometryCache.delete(id)`.
+- Every `addPart` MUST pair with `geometryCache.set(part.id, geo)` — see [useImport.ts](src/features/import/hooks/useImport.ts).
+- Every `removePart` MUST pair with `geometryCache.delete(id)` — see [softJawsStore.ts](src/stores/softJawsStore.ts).
 - Full session reset clears both — see [AppShell.tsx::handleResetSession](src/layout/AppShell.tsx).
 
-Orphan a Float32Array in the cache and you leak ~MB per part. Forget to cache one and renders go blank.
-
----
-
-## Hot paths
-
-```
-STL file
-  ↓ parseSTL  (sync, main thread today — see Perf below)
-CachedGeometry + ProcessedPart
-  ↓
-softJawsStore.parts
-  ├─→ render path: PartMeshes / JawBlankMesh / ViseModel  (store-driven)
-  └─→ CSG path:    useJawProfile.generate()
-                     ↓ build positioned blank box (left & right)
-                     ↓ bake matrixWorld into geometry
-                     ↓ 2× Worker(profileWorker.ts) in parallel
-                     ↓ CSGEngine.createNegativeSpace (sweep blank − part)
-                     ↓ cache JAW_PROFILE_CACHE_KEY_{LEFT,RIGHT}
-                     ↓ store.jawProfile.generated = true
-                     ↓ Scene3D swaps JawBlankMesh → JawProfileMesh
-  ↓
-meshToSTL → downloadFile
-```
-
----
-
-## Performance non-negotiables
-
-- **Always slice the store.** `useSoftJawsStore(s => s.viseConfig.jawWidth)`. Never `useSoftJawsStore()` without a selector — it re-renders on any field change.
-- **Never `new Worker(...)` ad-hoc** — use cad-core's `workerManager` ([packages/cad-core/src/workers/workerManager.ts](packages/cad-core/src/workers/workerManager.ts)).
-- **`useMemo` every geometry derivation.** `useCallback` every handler passed to children.
-- **STL parse > 50 MB → must run in a worker.** Today's 200 MB limit blocks the UI thread for seconds.
-- **CSG depth × segments is quadratic.** Crop the tool mesh to the local clamp band before CSG; don't sweep through the whole part.
-
----
-
-## Workflow step status — current truth (defer to PROGRESS.md for narrative)
-
-| Step           | Status | Notes                                                              |
-|----------------|--------|--------------------------------------------------------------------|
-| vise-config    | real   | Drives ALL geometry — touch carefully                              |
-| import         | real   | parseSTL → store + cache                                           |
-| jaw-blank      | real   | Drives JawBlankMesh dimensions and material                        |
-| jaw-profile    | real   | CSG worker → JawProfileMesh                                        |
-| grip-features  | STUB   | UI writes to store; geometry pipeline ignores it                   |
-| mounting-holes | being built (this branch) | Real CSG drilled per blank as a 3rd pass        |
-| export         | real   | STL only; 3MF returns "not implemented"                            |
-
----
-
-## Not yet wired — do NOT claim these work
-
-- Undo / redo buttons (UI present, `useHistoryStore` exists in cad-ui but not connected)
-- 3MF export
-- Multi-part jaw generation (only `activePart ?? parts[0]` is used in CSG)
-- Grip features → geometry
-
-If you implement any of these, also delete the matching line above.
-
----
-
-## Stale doc warnings (don't trust these specific sections)
-
-- **PROGRESS.md lines 152-156** — references `jawBlank.depth` / `jawBlank.width`. The actual code uses `jawBlank.thickness` / `jawBlank.face` (renames happened more recently in [src/stores/types.ts](src/stores/types.ts#L52-L60)).
-- **workflow-implementation.instructions.md** — `ViseConfig` schema lists `jawDepth`, `maxStroke`, `'two-jaw-vise'` etc. Actual code: `jawStroke`, `'custom'` only — see [src/stores/types.ts:37-46](src/stores/types.ts#L37-L46).
-
-When in doubt, **read the code**, not the docs.
+Orphan a Float32Array and you leak ~MB per part. Forget to cache one and renders go blank.
 
 ---
 
 ## Commands
 
 ```bash
-npx tsc --noEmit          # typecheck — only gate today (no test suite yet)
+npx tsc --noEmit          # typecheck — only correctness gate today (no test suite yet)
 npm run lint              # eslint
 npm run dev               # vite dev server
 npm run build             # tsc -b && vite build
 ```
+
+The `softjaws-verifier` agent (in `.claude/agents/`) runs `tsc --noEmit` plus an invariant + anti-pattern grep. Invoke after non-trivial changes.
 
 ---
 
@@ -169,5 +97,15 @@ npm run build             # tsc -b && vite build
 
 - Comments only when the WHY is non-obvious. Never explain WHAT (well-named identifiers do that).
 - No backwards-compat shims, no `// removed because…` comments, no half-implementations.
-- Match scope to the request — bug fix means one fix, not surrounding cleanup.
-- File-reference style in chat: markdown links `[file.tsx:42](src/file.tsx#L42)`, never bare paths or backticks.
+- Match scope to the request — a bug fix is one fix, not surrounding cleanup.
+- File references in chat: markdown links `[file.tsx:42](src/file.tsx#L42)`, never bare paths or backticks.
+- After meaningful changes, update `PROGRESS.md` proactively. Don't ask first.
+
+---
+
+## Stale-doc warnings (read these before trusting older docs)
+
+- **PROGRESS.md is the truth** for current status. The `.github/instructions/*.md` files predate several refactors — if they disagree with the matching `CLAUDE.md` in this repo, the `CLAUDE.md` wins.
+- **`.github/instructions/workflow-implementation.instructions.md`** lists `ViseConfig` fields like `jawDepth`, `maxStroke`, `'two-jaw-vise'`, none of which exist in the current `src/stores/types.ts`. The vise is a single fully-customisable preset; fields are `jawWidth`, `jawHeight`, `jawStroke`, `tSlotWidth`, `tSlotSpacing`.
+
+When in doubt, **read the code**, not the docs.

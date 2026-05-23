@@ -17,7 +17,7 @@
  *     → next effect run picks up the new store values cleanly.
  */
 
-import { useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { SelectableTransformControls } from '@rapidtool/cad-ui';
 import type { TransformData } from '@rapidtool/cad-ui';
@@ -25,7 +25,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX } from '@/utils/partGeometry';
+import { computeWorldSpanX, effectiveClampGap } from '@/utils/partGeometry';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -60,8 +60,15 @@ function PartMesh({
   const geomData = geometryCache.get(part.id);
   const updatePartTransform = useSoftJawsStore((s) => s.updatePartTransform);
   const clampGap = useSoftJawsStore((s) => s.clampGap);
+  const jawProfile = useSoftJawsStore((s) => s.jawProfile);
   const jawBlankThickness = useSoftJawsStore((s) => s.jawBlank.thickness);
   const viseConfig = useViseStore((s) => s.viseConfig);
+
+  // Once profile.generated, the workpiece slides into the left cavity by
+  // (depth − safety) mm — mirrors the right jaw closing in by 2× that. See
+  // effectiveClampGap. Before profile generation it's a no-op (returns
+  // designClampGap unchanged).
+  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
   // While true, useLayoutEffect must NOT re-apply store values.
@@ -89,6 +96,15 @@ function PartMesh({
     return geo;
   }, [geomData, part.boundingBox]);
 
+  // Free the GPU buffers when this PartMesh unmounts or the geometry is
+  // replaced (e.g. user re-imports the same part id). Otherwise every
+  // import + remove cycle leaks the part's vertex/normal buffers.
+  useEffect(() => {
+    return () => {
+      geometry?.dispose();
+    };
+  }, [geometry]);
+
   const { position: pos, rotation: rot } = part.transform;
   const partHeight = part.boundingBox.max[1] - part.boundingBox.min[1];
   // Y where part bottom touches the jaw rail surface
@@ -97,26 +113,40 @@ function PartMesh({
   // X position: left edge of the centered geometry must touch the fixed left jaw's clamping face.
   // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
   // We must use the WIDTH (delta), NOT bbox.min[0] which is the original file coordinate.
-  const snapX = useMemo(() => {
+  //
+  // DESIGN snapX: Always uses the design-time clampGap. This is the source of truth
+  // for the store and CSG subtraction.
+  const designSnapX = useMemo(() => {
     const leftInnerX = bracketInnerX(viseConfig);
     const leftFaceX  = -leftInnerX + jawBlankThickness;
     const worldWidth = computeWorldSpanX(part);
     return leftFaceX + clampGap + worldWidth / 2;
   }, [viseConfig, jawBlankThickness, clampGap, part]);
 
+  // RENDER snapX: Uses the effective (possibly shifted) clampGap. This is what
+  // the user sees in the 3D viewport.
+  const renderSnapX = useMemo(() => {
+    const leftInnerX = bracketInnerX(viseConfig);
+    const leftFaceX  = -leftInnerX + jawBlankThickness;
+    const worldWidth = computeWorldSpanX(part);
+    return leftFaceX + renderClampGap + worldWidth / 2;
+  }, [viseConfig, jawBlankThickness, renderClampGap, part]);
+
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {
     if (!meshRef.current || gizmoActive) return;
-    meshRef.current.position.set(snapX, baseY + pos.y, pos.z);
+    meshRef.current.position.set(renderSnapX, baseY + pos.y, pos.z);
     meshRef.current.rotation.set(
       rot.x * DEG2RAD,
       rot.y * DEG2RAD,
       rot.z * DEG2RAD,
     );
-  }, [snapX, pos.y, pos.z, rot.x, rot.y, rot.z, baseY, gizmoActive]);
+  }, [renderSnapX, pos.y, pos.z, rot.x, rot.y, rot.z, baseY, gizmoActive]);
 
-  // ── Click: select part + show gizmo ──────────────────────────────────────
-  const handleClick = useCallback(
+  // ── Double-click: select part + show gizmo ───────────────────────────────
+  // Must be double-click, NOT single click — single-click-drag is camera orbit
+  // and must never activate the gizmo mid-pan.
+  const handleDoubleClick = useCallback(
     (e: { stopPropagation: () => void }) => {
       e.stopPropagation();
       onSelect(part.id);
@@ -149,7 +179,7 @@ function PartMesh({
     ({ position: worldPos, rotation: worldRot }: TransformData) => {
       updatePartTransform(part.id, {
         position: {
-          x: snapX, // X is mathematically locked to the fixed jaw, ignore gizmo drag
+          x: designSnapX, // X is mathematically locked to the fixed jaw, ignore gizmo drag
           y: worldPos.y - baseY, // strip rail offset — store holds delta only
           z: worldPos.z,
         },
@@ -165,7 +195,7 @@ function PartMesh({
       // useLayoutEffect apply world-space values in local space, doubling
       // the offset. gizmoActive lifecycle is managed by handleSelectionChange.
     },
-    [part.id, updatePartTransform, baseY],
+    [part.id, updatePartTransform, baseY, designSnapX],
   );
 
   if (!geometry) return null;
@@ -186,7 +216,7 @@ function PartMesh({
       <mesh
         ref={meshRef}
         geometry={geometry}
-        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         castShadow
         receiveShadow
       >

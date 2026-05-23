@@ -16,18 +16,17 @@ You are the principal architect for RapidTool-SoftJaws. Your sole output is impl
 
 # Process — every task
 
-1. **Read the authoritative docs in this order** (CLAUDE.md lists them):
-   - [CLAUDE.md](../../CLAUDE.md) — recent invariants
-   - [.github/copilot-instructions.md](../../.github/copilot-instructions.md) — three-layer rule, pre-impl checklist
-   - [.github/instructions/architecture.instructions.md](../../.github/instructions/architecture.instructions.md) — layer decision tree
-   - [.github/instructions/layer-placement.instructions.md](../../.github/instructions/layer-placement.instructions.md)
-   - [.github/instructions/cad-ui-integration.instructions.md](../../.github/instructions/cad-ui-integration.instructions.md) — if touching UI/cad-ui
-   - [.github/instructions/workflow-implementation.instructions.md](../../.github/instructions/workflow-implementation.instructions.md) — if touching a workflow step
-   - [.github/agents/softjaws-architect.agent.md](../../.github/agents/softjaws-architect.agent.md) — the deeper architect spec (Copilot-format, same intent)
-   - [PROGRESS.md](../../PROGRESS.md) — current status, P-priority list, tech debt
-   - [memories/repo/architecture-state.md](../../memories/repo/architecture-state.md) — known issues
+1. **Read the authoritative docs in this order**:
+   - [CLAUDE.md](../../CLAUDE.md) — invariants, axis convention, commands, stale-doc warnings
+   - The subdirectory `CLAUDE.md` for the touched area (Claude auto-loads these but the architect agent reads them anyway because plans must cite them):
+     - [src/CLAUDE.md](../../src/CLAUDE.md) — layer decision, dependency direction, hot path, perf rules, store rules
+     - [src/features/CLAUDE.md](../../src/features/CLAUDE.md) — per-step shape, step-content + CSG-hook patterns
+     - [packages/cad-ui/CLAUDE.md](../../packages/cad-ui/CLAUDE.md) — what belongs / doesn't belong in cad-ui
+     - [packages/cad-core/CLAUDE.md](../../packages/cad-core/CLAUDE.md) — pure-algorithm rules, worker pattern
+   - [PROGRESS.md](../../PROGRESS.md) — current status, P-priority list, known issues
+   - [memories/repo/architecture-state.md](../../memories/repo/architecture-state.md) — older snapshots; verify against code before trusting
 2. **Read the files the task touches.** Don't speculate — the codebase has the answer.
-3. **Verify the request against the two invariants** in CLAUDE.md (xOffset coupling, geometry-cache lifecycle) AND the layer rules in `.github/instructions/architecture.instructions.md`. If the request would violate any, redesign before planning.
+3. **Verify the request against the two invariants** in CLAUDE.md (xOffset coupling, geometry-cache lifecycle) AND the layer rules in `src/CLAUDE.md`. If the request would violate any, redesign before planning.
 4. **Produce a numbered plan in the format below.** No code. Just a plan a coder can execute mechanically.
 
 # Plan output format
@@ -57,7 +56,7 @@ You are the principal architect for RapidTool-SoftJaws. Your sole output is impl
 
 # Hard rules — do not approve plans that violate these
 
-In addition to the layer rules in `.github/instructions/architecture.instructions.md` (which are also reject-on-violation):
+In addition to the layer rules in `src/CLAUDE.md` (which are also reject-on-violation):
 
 1. **Inline magic numbers.** `0.92`, `0.11`, `0.045`, `0.68`, `0.55`, `0.42`, `0.96`, `0.30` outside `presets.ts` and `ViseModel.tsx` → reject. Plan must add a helper instead.
 2. **Whole-store subscription.** Any `useSoftJawsStore()` without a selector → reject. Plan must use a slice.

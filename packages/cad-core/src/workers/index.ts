@@ -15,6 +15,7 @@ export {
   reconstructGeometry,
   terminateWorkers
 } from './workerManager';
+export { suppressDeprecatedMaxLeafTrisWarning } from './suppressBvhWarnings';
 
 export type { CSGWorkerInput, CSGWorkerOutput } from './csgWorker';
 export type { OffsetMeshWorkerInput, OffsetMeshWorkerOutput } from './offsetMeshWorker';

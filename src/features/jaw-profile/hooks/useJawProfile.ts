@@ -3,10 +3,13 @@
  *
  * The end product is TWO soft-jaw blanks (left and right) with workpiece-
  * shaped pockets cut into their inner X-faces. This hook:
- *   1. Builds a positioned blank mesh on each side (±jawXOffset)
- *   2. Bakes each blank's world transform into its geometry
- *   3. Fires one CSG worker per side with the correct sweep direction
- *   4. Caches the results under JAW_PROFILE_CACHE_KEY_{LEFT,RIGHT}
+ *   1. Validates inputs (active part, geometry cache, store consistency)
+ *   2. Builds a positioned blank mesh on each side, using the SAME
+ *      `rightJawCenterX` helper that JawBlankMesh renders with (no drift)
+ *   3. Bakes each blank's world transform into its geometry
+ *   4. Fires one CSG worker per side with the correct sweep direction
+ *   5. Validates the result face count (catches silent no-overlap failures)
+ *   6. Caches the results under JAW_PROFILE_CACHE_KEY_{LEFT,RIGHT}
  *
  * Removal directions:
  *   - Left  blank  → sweep toward -X  (removalDir = [-1, 0, 0])
@@ -21,21 +24,43 @@ import {
   geometryCache,
   JAW_PROFILE_CACHE_KEY_LEFT,
   JAW_PROFILE_CACHE_KEY_RIGHT,
+  JAW_HOLED_CACHE_KEY_LEFT,
+  JAW_HOLED_CACHE_KEY_RIGHT,
 } from '@/stores/geometryCache';
 import {
   jawBaseH,
   bracketInnerX,
   pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX } from '@/utils/partGeometry';
+import { computeWorldSpanX, rightJawCenterX } from '@/utils/partGeometry';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
 export interface UseJawProfileReturn {
-  status: JawProfileStatus;
-  error: string | null;
-  generate: () => void;
+  status:    JawProfileStatus;
+  error:     string | null;
+  /** Total face count of the two profiled blanks combined, after a successful
+   *  run. null when not generated. Lets the UI confirm a substantive cut. */
+  faceCount: number | null;
+  generate:  () => void;
 }
+
+/** A raw blank box has 12 triangles. If CSG returns ≤ this many, the part
+ *  did not intersect the blank and the "cut" was a no-op. We treat that as
+ *  a validation failure so the user sees a clear error instead of an
+ *  unchanged jaw rendered as a "profile". */
+const MIN_VALID_FACE_COUNT = 24;
+
+/** Upper bound on per-side face count. Runaway CSG output (millions of
+ *  triangles from non-manifold input or degenerate intersections) uploads
+ *  multi-megabyte buffers to the GPU and can trip a WebGL context loss.
+ *  Bail before that happens with a clear error message. */
+const MAX_VALID_FACE_COUNT = 150_000;
+
+/** Margin between the rendered jaw face Z and the pillar Z width — the jaw
+ *  visually fits inside the pillar without overhang. Matches the value used
+ *  by JawBlankMesh's `renderFace = Math.min(face, maxFace * 0.98)`. */
+const FACE_FIT_K = 0.98;
 
 // ─── Helper: build a positioned blank mesh ────────────────────────────────────
 
@@ -61,6 +86,14 @@ function buildBlankMesh(
 
 // ─── Helper: fire a single worker and resolve when it posts back ─────────────
 
+/** Hard timeout for a single CSG worker call. Generous (60 s) — a typical
+ *  pocket cut on a 5–50 k-triangle part finishes in under 5 s on modest
+ *  hardware. If we hit this ceiling something is wrong (BVH max-depth
+ *  thrashing, runaway intersection, dead worker) and the user should see
+ *  an error instead of an indefinite "Generating…" spinner that culminates
+ *  in a WebGL context loss. */
+const CSG_WORKER_TIMEOUT_MS = 300_000;
+
 function runCsgWorker(
   payload: import('../worker/profileWorker').ProfileWorkerInput,
 ): Promise<import('../worker/profileWorker').ProfileWorkerOutput> {
@@ -69,11 +102,22 @@ function runCsgWorker(
       new URL('../worker/profileWorker.ts', import.meta.url),
       { type: 'module' },
     );
+    const timeoutId = setTimeout(() => {
+      worker.terminate();
+      reject(new Error(
+        `CSG worker timed out after ${CSG_WORKER_TIMEOUT_MS / 1000} s. ` +
+        `The part may be too complex or have non-manifold geometry — try a ` +
+        `simpler / decimated STL or check for self-intersections.`,
+      ));
+    }, CSG_WORKER_TIMEOUT_MS);
+
     worker.onmessage = (e: MessageEvent<import('../worker/profileWorker').ProfileWorkerOutput>) => {
+      clearTimeout(timeoutId);
       resolve(e.data);
       worker.terminate();
     };
     worker.onerror = (err) => {
+      clearTimeout(timeoutId);
       reject(new Error('Worker execution error: ' + err.message));
       worker.terminate();
     };
@@ -84,56 +128,82 @@ function runCsgWorker(
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useJawProfile(): UseJawProfileReturn {
-  const [status, setStatus] = useState<JawProfileStatus>('idle');
-  const [error, setError]   = useState<string | null>(null);
+  const [status,    setStatus]    = useState<JawProfileStatus>('idle');
+  const [error,     setError]     = useState<string | null>(null);
+  const [faceCount, setFaceCount] = useState<number | null>(null);
 
-  const { parts, jawBlank, jawProfile, activePart, clampGap, updateJawProfile } =
+  const {
+    parts,
+    jawBlank,
+    jawProfile,
+    activePart,
+    clampGap,
+    updateJawProfile,
+    updateMountingHoles,
+  } =
     useSoftJawsStore();
   const viseConfig = useViseStore((s) => s.viseConfig);
 
   const generate = useCallback(async () => {
+    // Clear stale UI state immediately so the user sees the new run begin.
+    setError(null);
+    setFaceCount(null);
+    setStatus('running');
+    geometryCache.delete(JAW_PROFILE_CACHE_KEY_LEFT);
+    geometryCache.delete(JAW_PROFILE_CACHE_KEY_RIGHT);
+    geometryCache.delete(JAW_HOLED_CACHE_KEY_LEFT);
+    geometryCache.delete(JAW_HOLED_CACHE_KEY_RIGHT);
+    updateMountingHoles({ generated: false });
+
+    // ── Input validation — specific error per failure mode ────────────────
     const partId = activePart ?? parts[0]?.id ?? null;
     if (!partId) {
-      setError('Import a part before generating the jaw profile.');
+      setError('No active part. Import an STL in Step 2 before generating the profile.');
+      setStatus('error');
       return;
     }
 
     const cachedGeo = geometryCache.get(partId);
     if (!cachedGeo) {
-      setError('Part geometry not found in cache. Try re-importing the file.');
+      setError('Part geometry missing from the cache. Try re-importing the file.');
+      setStatus('error');
       return;
     }
 
     const part = parts.find((p) => p.id === partId);
-    if (!part) return;
+    if (!part) {
+      setError('Active part not found in store. Try re-importing the file.');
+      setStatus('error');
+      return;
+    }
 
-    setStatus('running');
-    setError(null);
+    if (jawProfile.depth <= 0) {
+      setError('Pocket depth must be greater than 0.');
+      setStatus('error');
+      return;
+    }
+
+    if (jawProfile.depth >= jawBlank.thickness) {
+      setError(`Pocket depth (${jawProfile.depth} mm) must be less than jaw thickness (${jawBlank.thickness} mm).`);
+      setStatus('error');
+      return;
+    }
 
     // ── Geometry layout ─────────────────────────────────────────────────────
-    // Soft jaws are bolted to the L-bracket pillars (fixed end-stops), so
-    // the jaw outer face abuts the pillar inner face — independent of part
-    // width. Face is capped to the pillar Z width so the jaw never
-    // overhangs the platform (mirrors JawBlankMesh render).
+    // Soft jaws are bolted to the L-bracket pillars. Face is capped to the
+    // pillar Z width so the jaw never overhangs the platform (mirrors the
+    // JawBlankMesh render exactly via FACE_FIT_K).
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
-    const fixedXOff  = innerX - jawBlank.thickness / 2;
     const blankY     = baseH + jawBlank.height / 2;
-    const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
+    const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * FACE_FIT_K);
 
-    // ── Jaw blank X positions (must exactly match JawBlankMesh render) ───────
-    // Use rotation-aware world span so a rotated part (e.g. 90° Y) correctly
-    // widens the right jaw to match its new effective clamping width.
-    const worldWidth    = computeWorldSpanX(part);
-    const leftFaceX     = -innerX + jawBlank.thickness;
-    const partRightEdge = leftFaceX + clampGap + worldWidth;
-
-    // Left blank: bolted to the fixed left jaw — never moves.
-    const leftXCenter  = -(fixedXOff);
-
-    // Right blank: slides to clamp the right side of the part.
-    const rightXOffset = Math.min(fixedXOff, partRightEdge + clampGap + jawBlank.thickness / 2);
-    const rightXCenter = rightXOffset;
+    // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
+    const leftXCenter  = -(innerX - jawBlank.thickness / 2);
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, clampGap);
+    const leftFaceX    = -innerX + jawBlank.thickness;
+    const partSpanX    = computeWorldSpanX(part);
+    const snapX        = leftFaceX + clampGap + partSpanX / 2;
 
     // ── Build left & right blanks, bake world transform into geometry ───────
     const buildBakedGeo = (xCenter: number) => {
@@ -152,21 +222,38 @@ export function useJawProfile(): UseJawProfileReturn {
     const leftGeo  = buildBakedGeo(leftXCenter);
     const rightGeo = buildBakedGeo(rightXCenter);
 
+    // The worker positions the part at `partHeight/2 + transform.y`, which
+    // would land it with its bottom at world Y = 0. The scene's PartMeshes
+    // sits the part on the RAIL (Y = jawBaseH). Without this correction the
+    // CSG sweep and the blank only partially overlap on Y, producing
+    // degenerate slivers + inverted normals (the "black artifact" mess).
+    // Push the rail offset into transform.position.y so the worker lands
+    // the part at the same world Y the scene shows.
+    const partTransformForCsg = {
+      position: {
+        x: snapX,
+        y: baseH + part.transform.position.y,
+        z: part.transform.position.z,
+      },
+      rotation: part.transform.rotation,
+    };
+
     const makePayload = (
       geo: THREE.BufferGeometry,
       removalDir: [number, number, number],
     ): import('../worker/profileWorker').ProfileWorkerInput => ({
-      id:             partId,
-      blankPositions: geo.getAttribute('position').array as Float32Array,
-      blankNormals:   geo.getAttribute('normal').array   as Float32Array,
-      blankIndices:   geo.index?.array as Uint32Array | undefined,
-      partPositions:  cachedGeo.positions,
-      partNormals:    cachedGeo.normals,
-      partTransform:  part.transform,
+      id:              partId,
+      blankPositions:  geo.getAttribute('position').array as Float32Array,
+      blankNormals:    geo.getAttribute('normal').array   as Float32Array,
+      blankIndices:    geo.index?.array as Uint32Array | undefined,
+      partPositions:   cachedGeo.positions,
+      partNormals:     cachedGeo.normals,
+      partIndices:     cachedGeo.indices,
+      partTransform:   partTransformForCsg,
       partBoundingBox: part.boundingBox,
       removalDir,
-      depth:  jawProfile.depth,
-      offset: jawProfile.clearance,
+      depth:           jawProfile.depth,
+      offset:          jawProfile.clearance,
     });
 
     try {
@@ -177,36 +264,69 @@ export function useJawProfile(): UseJawProfileReturn {
       ]);
 
       if (!leftRes.success || !leftRes.positions || !leftRes.normals) {
-        throw new Error(leftRes.error || 'Left CSG failed');
+        throw new Error(leftRes.error || 'CSG worker returned no geometry for the left blank.');
       }
       if (!rightRes.success || !rightRes.positions || !rightRes.normals) {
-        throw new Error(rightRes.error || 'Right CSG failed');
+        throw new Error(rightRes.error || 'CSG worker returned no geometry for the right blank.');
+      }
+
+      // ── Result validation ────────────────────────────────────────────────
+      // A raw box has 12 triangles; a real pocket cut adds many more. If
+      // either result has too few faces, the part didn't overlap the blank
+      // and the "cut" was a no-op. Surface that as a clear error instead of
+      // marking generated=true on an unchanged jaw.
+      const leftFaceCount  = leftRes.indices  ? leftRes.indices.length  / 3 : leftRes.positions.length  / 9;
+      const rightFaceCount = rightRes.indices ? rightRes.indices.length / 3 : rightRes.positions.length / 9;
+
+      // Guard against runaway CSG output — uploads
+      // multi-megabyte buffers to the GPU and can trip a WebGL context loss.
+      // Usually indicates a non-manifold input or degenerate intersection.
+      if (leftFaceCount > MAX_VALID_FACE_COUNT || rightFaceCount > MAX_VALID_FACE_COUNT) {
+        throw new Error(
+          `CSG produced ${Math.max(leftFaceCount, rightFaceCount).toLocaleString()} ` +
+          `triangles on one side — far above the ${MAX_VALID_FACE_COUNT.toLocaleString()} ` +
+          `safety limit. The part may have non-manifold geometry, or the clearance/depth ` +
+          `combination is producing degenerate slivers. Try a simpler part or different params.`,
+        );
+      }
+
+      if (leftFaceCount < MIN_VALID_FACE_COUNT || rightFaceCount < MIN_VALID_FACE_COUNT) {
+        throw new Error(
+          'CSG produced an empty cut — the part does not overlap the jaw clamping zone. ' +
+          'Check that the part is positioned between the jaws and that pocket depth is > 0.',
+        );
       }
 
       geometryCache.set(JAW_PROFILE_CACHE_KEY_LEFT, {
         positions: leftRes.positions,
         normals:   leftRes.normals,
         indices:   leftRes.indices,
-        faceCount: leftRes.indices
-          ? leftRes.indices.length / 3
-          : leftRes.positions.length / 9,
+        faceCount: leftFaceCount,
       });
       geometryCache.set(JAW_PROFILE_CACHE_KEY_RIGHT, {
         positions: rightRes.positions,
         normals:   rightRes.normals,
         indices:   rightRes.indices,
-        faceCount: rightRes.indices
-          ? rightRes.indices.length / 3
-          : rightRes.positions.length / 9,
+        faceCount: rightFaceCount,
       });
 
       updateJawProfile({ generated: true });
+      setFaceCount(leftFaceCount + rightFaceCount);
       setStatus('success');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
-  }, [parts, activePart, jawBlank, jawProfile, viseConfig, updateJawProfile]);
+  }, [
+    parts,
+    activePart,
+    jawBlank,
+    jawProfile,
+    viseConfig,
+    clampGap,
+    updateJawProfile,
+    updateMountingHoles,
+  ]);
 
-  return { status, error, generate };
+  return { status, error, faceCount, generate };
 }

@@ -223,13 +223,24 @@ RapidTool-SoftJaws/
 │   └── COORDINATE_SYSTEM.md     # Coordinate system reference
 │
 ├── .github/
-│   ├── copilot-instructions.md   # Project-wide AI instructions
-│   ├── agents/
-│   │   └── softjaws-architect.agent.md  # Architect agent
-│   └── instructions/
-│       ├── architecture.instructions.md
-│       ├── cad-ui-integration.instructions.md
+│   ├── copilot-instructions.md   # GitHub Copilot config (legacy mirror)
+│   └── instructions/             # Copilot frontmatter format — superseded by
+│       ├── architecture.instructions.md             # the per-directory
+│       ├── cad-ui-integration.instructions.md       # CLAUDE.md files
+│       ├── layer-placement.instructions.md
 │       └── workflow-implementation.instructions.md
+│
+├── CLAUDE.md                     # Root brief — pointers + invariants
+├── src/CLAUDE.md                 # App-layer rules (auto-loaded in src/)
+├── src/features/CLAUDE.md        # Workflow-step shape + patterns
+├── packages/cad-ui/CLAUDE.md     # cad-ui ownership rules
+├── packages/cad-core/CLAUDE.md   # Pure-algorithm rules
+│
+├── .claude/
+│   └── agents/
+│       ├── softjaws-architect.md  # Architect subagent
+│       ├── softjaws-coder.md      # Coder subagent
+│       └── softjaws-verifier.md   # Verifier subagent
 │
 ├── package.json                  # Root package with workspaces
 ├── vite.config.ts

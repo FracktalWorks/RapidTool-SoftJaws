@@ -22,33 +22,21 @@ export async function initManifold(): Promise<boolean> {
     if (ManifoldModule) return true;
     
     try {
-        // Dynamic import for browser compatibility
-        // Manifold 3D exports a default function that returns a promise with the WASM module
         const module = await import('manifold-3d');
-        ManifoldModule = await module.default();
-        
-        // Call setup() to initialize the module - required!
+        // locateFile redirects the Emscripten WASM loader to the file we
+        // copied into public/. Works in both main thread and module workers
+        // because the URL is absolute.
+        ManifoldModule = await module.default({
+            locateFile: () => '/manifold.wasm',
+        });
+
         ManifoldModule.setup();
-        
         Manifold = ManifoldModule.Manifold;
-        Mesh = ManifoldModule.Mesh;
-        
+        Mesh     = ManifoldModule.Mesh;
+
         return true;
     } catch (error) {
         console.error('Failed to initialize Manifold 3D:', error);
-        // Try alternative loading for CDN
-        try {
-            // Fallback: try loading from global scope if loaded via script tag
-            if (typeof (window as any).Module !== 'undefined') {
-                ManifoldModule = (window as any).Module;
-                ManifoldModule.setup();
-                Manifold = ManifoldModule.Manifold;
-                Mesh = ManifoldModule.Mesh;
-                return true;
-            }
-        } catch (e2) {
-            console.error('Fallback loading also failed:', e2);
-        }
         return false;
     }
 }

@@ -20,7 +20,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { HolePosition } from '../data/positions';
 
 const HOLE_CLEARANCE      = 0.2;   // mm — clearance per side around bolt shank
-const COUNTERBORE_DIA_K   = 1.8;   // counterbore dia = K * boltDia
+/** Counterbore diameter = K * boltDia. Exported so position computation
+ *  (positions.ts) clamps Y using the SAME radius the CSG actually cuts. */
+export const COUNTERBORE_DIA_K   = 1.8;
 const COUNTERBORE_DEPTH_K = 0.7;   // counterbore depth = K * boltDia
 const THROUGH_OVERSHOOT   = 0.4;   // mm — extends past both faces to guarantee a clean cut
 const CYL_SEGMENTS        = 48;    // radial segments per cylinder — smooth at close zoom
@@ -75,3 +77,7 @@ export function buildHoleToolGeometry(
   for (const g of parts) g.dispose();
   return merged;
 }
+
+
+
+

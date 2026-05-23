@@ -30,11 +30,13 @@
 - `vite.config.ts` has `optimizeDeps.include` for radix packages (fixes 504 errors)
 
 ### Instruction Files
-- `.github/copilot-instructions.md` — Root guidelines, three-layer diagram, pre-implementation checklist
-- `.github/instructions/architecture.instructions.md` — Layer violation checks, decision tree, applyTo: "src/**,packages/**"
-- `.github/instructions/layer-placement.instructions.md` — Quick decision reference, applyTo: "**/*.{ts,tsx}"
-- `.github/instructions/cad-ui-integration.instructions.md` — Component APIs, cad-ui ownership rules
-- `.github/instructions/workflow-implementation.instructions.md` — 7 workflow steps guide
-- `.github/agents/softjaws-architect.agent.md` — Full architect agent with Step 0 mandatory checklist
+- `CLAUDE.md` (root) — Invariants, axis convention, commands, stale-doc warnings. Auto-loaded every session.
+- `src/CLAUDE.md` — Layer decision, dependency direction, feature shape, hot path, perf rules.
+- `src/features/CLAUDE.md` — Workflow-step shape, step-content + CSG-hook patterns, registration.
+- `packages/cad-ui/CLAUDE.md` — cad-ui ownership rules, generic-store API, forbidden imports.
+- `packages/cad-core/CLAUDE.md` — Pure-algorithm rules, worker pattern, result contract.
+- `.github/copilot-instructions.md` — GitHub Copilot equivalent; legacy. Defer to the matching `CLAUDE.md` when they disagree.
+- `.github/instructions/*.instructions.md` — Copilot frontmatter format; same intent as the per-directory `CLAUDE.md` files.
+- `.claude/agents/softjaws-{architect,coder,verifier}.md` — Subagent definitions.
     
 

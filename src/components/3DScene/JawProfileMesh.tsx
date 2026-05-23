@@ -13,10 +13,10 @@
  * in Scene3D — the profile IS the blank after the pocket subtraction.
  */
 
-import { useMemo } from 'react';
-import { Edges } from '@react-three/drei';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
+import { useViseStore } from '@/stores/viseStore';
 import {
   geometryCache,
   JAW_PROFILE_CACHE_KEY_LEFT,
@@ -24,6 +24,7 @@ import {
   JAW_HOLED_CACHE_KEY_LEFT,
   JAW_HOLED_CACHE_KEY_RIGHT,
 } from '@/stores/geometryCache';
+import { rightJawCenterX, effectiveClampGap } from '@/utils/partGeometry';
 
 function buildGeometry(cacheKey: string): THREE.BufferGeometry | null {
   const cached = geometryCache.get(cacheKey);
@@ -43,6 +44,30 @@ function buildGeometry(cacheKey: string): THREE.BufferGeometry | null {
 export function JawProfileMesh() {
   const profileReady = useSoftJawsStore((s) => s.jawProfile.generated);
   const holesReady   = useSoftJawsStore((s) => s.mountingHoles.generated);
+  const jawProfile   = useSoftJawsStore((s) => s.jawProfile);
+  const jawBlank     = useSoftJawsStore((s) => s.jawBlank);
+  const clampGap     = useSoftJawsStore((s) => s.clampGap);
+  const viseConfig   = useViseStore((s) => s.viseConfig);
+  const activePart   = useSoftJawsStore((s) => {
+    const id = s.activePart;
+    return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
+  });
+
+  // RIGHT-MESH POST-CLAMP SHIFT
+  //
+  // The CSG SUBTRACTION was computed with the right jaw centred at
+  // `rightJawCenterX(..., designClampGap)` and the resulting world-space
+  // mesh was baked at that position. After profile.generated we want the
+  // right jaw to APPEAR shifted inward — but we mustn't re-bake the CSG.
+  // The fix: render the right mesh with a position offset equal to the
+  // delta between the effective (closed) and design (open) jaw centres.
+  // For the LEFT mesh this delta is always zero (left bracket is fixed).
+  const rightMeshOffsetX = useMemo(() => {
+    if (!profileReady || !activePart) return 0;
+    const effective = effectiveClampGap(clampGap, jawProfile);
+    return rightJawCenterX(viseConfig, jawBlank, activePart, effective)
+         - rightJawCenterX(viseConfig, jawBlank, activePart, clampGap);
+  }, [profileReady, activePart, viseConfig, jawBlank, clampGap, jawProfile]);
 
   const geos = useMemo(() => {
     if (!profileReady) return null;
@@ -56,16 +81,42 @@ export function JawProfileMesh() {
     return { left, right };
   }, [profileReady, holesReady]);
 
+  // Free the GPU buffers of the OLD geometries whenever `geos` is replaced
+  // or this component unmounts. Without this every Generate Profile click
+  // leaks two BufferGeometry's worth of vertex / normal / index data on the
+  // GPU, eventually triggering "THREE.WebGLRenderer: Context Lost".
+  useEffect(() => {
+    return () => {
+      if (geos) {
+        geos.left.dispose();
+        geos.right.dispose();
+      }
+    };
+  }, [geos]);
+
   if (!geos) return null;
 
   return (
     <group>
-      {([geos.left, geos.right] as const).map((geo, i) => (
-        <mesh key={i} geometry={geo} position={[0, 0, 0]} castShadow receiveShadow>
-          <meshStandardMaterial color="#3a4048" roughness={0.4} metalness={0.75} />
-          <Edges color="#08090c" lineWidth={1} threshold={15} />
-        </mesh>
-      ))}
+      {/*
+        No edges overlay on the profiled jaw.
+        three-bvh-csg emits hundreds of stitching triangles connecting the
+        pocket boundary to the box corners. Even with mergeVertices welding
+        and a 35 degree threshold, the per-triangle normal noise on what
+        should be coplanar surfaces is large enough that EdgesGeometry
+        cannot tell those triangles apart from real corners — and you got
+        long diagonal scratch lines fanning across the jaw face. The
+        flat-shaded mesh reads as a clean machined surface without the
+        overlay.
+      */}
+      {/* Left mesh: stays at world origin (cavity baked here, left bracket fixed). */}
+      <mesh geometry={geos.left} position={[0, 0, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color="#3a4048" roughness={0.4} metalness={0.75} />
+      </mesh>
+      {/* Right mesh: shifts inward by rightMeshOffsetX once profile generated. */}
+      <mesh geometry={geos.right} position={[rightMeshOffsetX, 0, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color="#3a4048" roughness={0.4} metalness={0.75} />
+      </mesh>
     </group>
   );
 }

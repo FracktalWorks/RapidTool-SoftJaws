@@ -29,3 +29,4 @@ tsconfig.tsbuildinfo
 
 # Memory files (session-specific, not repo-scoped)
 memories/session/
+.gstack/

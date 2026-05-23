@@ -22,7 +22,7 @@ export function JawProfileStepContent() {
   const updateJawProfile  = useSoftJawsStore((s) => s.updateJawProfile);
   const setHovered        = useDimensionHoverStore((s) => s.setHovered);
   const clearHover        = useDimensionHoverStore((s) => s.clear);
-  const { status, error, generate } = useJawProfile();
+  const { status, error, faceCount, generate } = useJawProfile();
 
   const gate        = getStepGate('jaw-profile', { partCount, profileGenerated });
   const isRunning   = status === 'running';
@@ -146,9 +146,16 @@ export function JawProfileStepContent() {
       )}
 
       {status === 'success' && (
-        <div className="flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-600 dark:text-green-400">
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          <span>Profile generated — visible in the 3D viewport.</span>
+        <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs text-green-600 dark:text-green-400">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="flex flex-col gap-0.5">
+            <span>Profile generated — visible in the 3D viewport.</span>
+            {faceCount != null && (
+              <span className="text-[10px] text-green-700/80 dark:text-green-300/70 font-tech">
+                {faceCount.toLocaleString()} triangles across both jaws · pocket {jawProfile.depth} mm deep · {jawProfile.clearance} mm clearance
+              </span>
+            )}
+          </div>
         </div>
       )}
 

@@ -9,11 +9,14 @@
 
 import * as THREE from 'three';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
+import { suppressDeprecatedMaxLeafTrisWarning } from './suppressBvhWarnings';
+
+suppressDeprecatedMaxLeafTrisWarning();
 
 // BVH options with increased maxDepth to handle complex geometries without warnings
 const BVH_OPTIONS = {
   maxDepth: 100, // Default is 40, increase for complex merged geometries
-  maxLeafTris: 10,
+  maxLeafSize: 10,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

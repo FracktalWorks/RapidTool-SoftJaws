@@ -23,7 +23,10 @@ export function MountingHolesStepContent() {
   return (
     <div className="flex flex-col gap-4 p-3">
       <p className="text-xs text-muted-foreground font-tech tracking-wide">
-        Configure mounting bolts, then drill through-holes + counterbores into both blanks.
+        Drill the SOFT JAW BLANKS to match the vise's factory bolt pattern.
+        The bracket's tapped holes are shown on the vise from the start —
+        this step machines matching through-holes + counterbores into the
+        jaw blanks so the assembly bolts together.
       </p>
 
       {/* ── Parameters ────────────────────────────────────────────── */}

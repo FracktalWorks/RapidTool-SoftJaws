@@ -22,7 +22,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
-import { computeWorldSpanX } from '@/utils/partGeometry';
+import { rightBracketInnerX, effectiveClampGap } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
@@ -153,29 +153,33 @@ export function ViseModel() {
   const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles  = useSoftJawsStore((s) => s.mountingHoles);
   const clampGap       = useSoftJawsStore((s) => s.clampGap);
+  const jawProfile     = useSoftJawsStore((s) => s.jawProfile);
   const activePart = useSoftJawsStore((s) => {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
+  // RENDER-TIME clampGap.  Once the profile is generated, the right
+  // bracket carriage closes on the workpiece — see effectiveClampGap.
+  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
+
   // Left L-bracket is ALWAYS fixed (the static jaw of a milling vise).
   // Right L-bracket carriage tracks the rotated world-space right edge of the
-  // part — same formula consumed by JawBlankMesh so jaw + carriage move together.
+  // part — uses shared rightBracketInnerX so PillarBoltDecals lands its bolt
+  // exits on the same moved face (no more floating decals).
   const leftInnerX = bracketInnerX(viseConfig);
-  const rightInnerX = useMemo(() => {
-    const fixedInnerX = bracketInnerX(viseConfig);
-    if (!activePart) return fixedInnerX;
-    const worldWidth    = computeWorldSpanX(activePart);
-    const leftFaceX     = -fixedInnerX + jawBlank.thickness;
-    const partRightEdge = leftFaceX + clampGap + worldWidth;
-    return Math.min(fixedInnerX, partRightEdge + clampGap + jawBlank.thickness);
-  }, [viseConfig, jawBlank.thickness, activePart, clampGap]);
+  const rightInnerX = useMemo(
+    () => rightBracketInnerX(viseConfig, jawBlank, activePart, renderClampGap),
+    [viseConfig, jawBlank, activePart, renderClampGap],
+  );
 
   // Pillar face tapped-hole positions — same layout as jaw counterbores.
+  // Right-side positions track the part (via rightJawCenterX inside the helper)
+  // so pillar decorations follow the moving bracket carriage.
   const pillarHoles = useMemo(
-    () => computeMountingHolePositions(viseConfig, jawBlank, mountingHoles),
-    [viseConfig, jawBlank, mountingHoles],
+    () => computeMountingHolePositions(viseConfig, jawBlank, mountingHoles, activePart, renderClampGap),
+    [viseConfig, jawBlank, mountingHoles, activePart, renderClampGap],
   );
   // Match the visual bolt scale that JawBlankMesh uses so the decals are coaxial.
   const pillarBoltDia = Math.min(jawBlank.thickness * 0.30, jawBlank.face * 0.16);
@@ -251,14 +255,18 @@ export function ViseModel() {
 
         return (
           <group key={sign}>
-            {/* Foot (horizontal leg, sits on rail top) */}
-            <Box
-              pos={[footCX, d.brFootY, 0]}
-              size={[d.brFootLen, d.brFootH, d.brFootW]}
-              color={BRACKET}
-              roughness={0.32}
-              metalness={0.88}
-            />
+            {/* Foot (horizontal leg, sits on rail top).
+                Skip rendering when BR_FOOT_H is collapsed to 0 — Three.js
+                creates degenerate geometry warnings for zero-thickness Box. */}
+            {d.brFootH > 0 && (
+              <Box
+                pos={[footCX, d.brFootY, 0]}
+                size={[d.brFootLen, d.brFootH, d.brFootW]}
+                color={BRACKET}
+                roughness={0.32}
+                metalness={0.88}
+              />
+            )}
 
             {/* Pillar (vertical leg — jaw blank's outer face abuts inner face) */}
             <Box

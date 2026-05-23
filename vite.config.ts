@@ -17,5 +17,8 @@ export default defineConfig({
       '@radix-ui/react-slot',
       '@radix-ui/react-accordion',
     ],
+    // Prevent esbuild from pre-bundling manifold-3d — it breaks import.meta.url
+    // which the Emscripten WASM loader uses to locate manifold.wasm at runtime.
+    exclude: ['manifold-3d'],
   },
 });

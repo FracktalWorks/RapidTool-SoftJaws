@@ -17,7 +17,6 @@ import * as THREE from 'three';
 import { performHoleCSGInWorker } from '@rapidtool/cad-core';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
-import { bracketInnerX } from '@/features/vise-config/data/presets';
 import {
   geometryCache,
   JAW_PROFILE_CACHE_KEY_LEFT,
@@ -98,9 +97,9 @@ export function useMountingHoles(): UseMountingHolesReturn {
   const clampGap            = useSoftJawsStore((s) => s.clampGap);
   const profileReady        = useSoftJawsStore((s) => s.jawProfile.generated);
   const updateMountingHoles = useSoftJawsStore((s) => s.updateMountingHoles);
-  const activePartBbox      = useSoftJawsStore((s) => {
+  const activePart          = useSoftJawsStore((s) => {
     const id = s.activePart;
-    return id ? (s.parts.find((p) => p.id === id)?.boundingBox ?? null) : null;
+    return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
 
   const generate = useCallback(async () => {
@@ -113,18 +112,12 @@ export function useMountingHoles(): UseMountingHolesReturn {
     setError(null);
 
     try {
-      // Compute the same adaptive jaw center X used at profile-generation time
-      // so drill positions align with the profiled blanks in the cache.
-      const fixedXOff    = bracketInnerX(viseConfig) - jawBlank.thickness / 2;
-      const adaptiveXOff = activePartBbox
-        ? Math.min(
-            fixedXOff,
-            (activePartBbox.max[0] - activePartBbox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
-          )
-        : fixedXOff;
-
+      // Adaptive right-jaw center X (rotation-aware, tracks the part) is now
+      // computed INSIDE computeMountingHolePositions via the shared
+      // rightJawCenterX helper. No local recomputation needed — the drill
+      // positions automatically align with the profiled blanks in the cache.
       const { left, right } = computeMountingHolePositions(
-        viseConfig, jawBlank, mountingHoles, adaptiveXOff,
+        viseConfig, jawBlank, mountingHoles, activePart, clampGap,
       );
 
       await Promise.all([
@@ -152,7 +145,7 @@ export function useMountingHoles(): UseMountingHolesReturn {
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
-  }, [profileReady, viseConfig, jawBlank, mountingHoles, clampGap, activePartBbox, updateMountingHoles]);
+  }, [profileReady, viseConfig, jawBlank, mountingHoles, clampGap, activePart, updateMountingHoles]);
 
   return { status, error, generate };
 }

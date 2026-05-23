@@ -22,7 +22,12 @@ export const VISE_GEOMETRY = {
   // changing those user params only resizes what they're labelled to resize.
   RAIL_HEIGHT:    40,   // mm — bed/rail Y. jawBaseH() returns this verbatim.
   BR_FOOT_LEN:    30,   // mm — L-bracket foot X length (does not grow with stroke).
-  BR_FOOT_H:       5,   // mm — L-bracket foot Y height (does not grow with vise height).
+  // BR_FOOT_H = 0 → no Y-offset under the pillar. The bracket renders as a
+  // plain vertical block flush with the rail; jaw blank bottom and pillar
+  // bottom both sit at Y = RAIL_HEIGHT. Closes the jaw-vs-pillar alignment
+  // gap (was 5 mm with the previous foot). The foot still exists in X length
+  // (BR_FOOT_LEN drives bracketInnerX) — only the Y thickness is collapsed.
+  BR_FOOT_H:       0,   // mm — L-bracket foot Y height (collapsed; see comment above).
   BR_PILLAR_LEN:  30,   // mm — L-bracket pillar X thickness (does not grow with stroke).
 
   // ─── Body tier proportions (as fractions of RAIL_HEIGHT) ───────────────────

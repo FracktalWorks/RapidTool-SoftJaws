@@ -27,7 +27,9 @@ import {
   pillarFaceWidth,
   jawBaseH,
 } from '@/features/vise-config/data/presets';
-import type { ViseConfig, JawBlankConfig, MountingHolesConfig } from '@/stores/types';
+import { rightJawCenterX } from '@/utils/partGeometry';
+import { COUNTERBORE_DIA_K } from '../utils/buildHoleTool';
+import type { ViseConfig, JawBlankConfig, MountingHolesConfig, ProcessedPart } from '@/stores/types';
 
 export interface HolePosition {
   /** World X (signed, ± per side). */
@@ -45,35 +47,54 @@ export interface PerSideHoles {
 
 const EDGE_MARGIN_K = 1.0;  // hole edge must clear face/pillar edge by ≥ 1× bolt dia
 
+/**
+ * Compute world-space mounting-hole positions for both jaws.
+ *
+ * The right side's X tracks the part: when an imported workpiece pushes the
+ * right L-bracket carriage inward, the right jaw moves with it, and so must
+ * every hole position derived for that jaw. Single source of truth is
+ * `rightJawCenterX(...)` — same helper consumed by `JawBlankMesh` (render),
+ * `ViseModel` (bracket position), and `useJawProfile` (CSG bake).
+ *
+ * Callers must pass the live `activePart` (or `null` if no part is loaded)
+ * and `clampGap` so the right-side X stays in sync with the rest of the
+ * scene. The left side is fixed.
+ */
 export function computeMountingHolePositions(
   viseConfig:    Pick<ViseConfig, 'jawWidth' | 'jawHeight' | 'jawStroke'>,
   jawBlank:      Pick<JawBlankConfig, 'thickness' | 'face' | 'height'>,
   mountingHoles: Pick<MountingHolesConfig, 'count' | 'spacing' | 'boltSize'>,
-  adaptiveXOff?: number,  // jaw |x| center — overrides formula when part is loaded
+  activePart:    ProcessedPart | null,
+  clampGap:      number,
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
-  const xCenterRight = adaptiveXOff ?? (innerX - jawBlank.thickness / 2);
+  // Right side tracks the part; left stays at the fixed max-stroke position.
+  const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, clampGap);
+  const xCenterLeft  = innerX - jawBlank.thickness / 2;
   const nominalY     = bracketBoltY(viseConfig);
 
   const count   = Math.max(1, Math.floor(mountingHoles.count));
   const spacing = Math.max(0, mountingHoles.spacing);
   const boltDia = mountingHoles.boltSize;
 
-  // --- P2 FIX: Y-Clamping ---
-  // If the user specifies an unusually short jaw blank, the fixed bolt Y (75mm)
-  // might sit above the jaw, leaving the CSG cylinder floating in mid-air.
-  // We must clamp the hole's Y position to safely remain inside the jaw bounds.
+  // --- P2 FIX: Y-Clamping (now sourced from the same COUNTERBORE_DIA_K
+  // that buildHoleTool actually uses, so the planned margin matches the
+  // counterbore the CSG will cut. Single source of truth — no drift.) ---
+  //
+  // If the user specifies an unusually short jaw blank, the nominal bolt Y
+  // could sit above the jaw, leaving the CSG cylinder floating in mid-air.
+  // Clamp so the counterbore stays fully inside [jawBaseY, jawTopY].
   const jawBaseY = jawBaseH(viseConfig.jawHeight);
   const jawTopY  = jawBaseY + jawBlank.height;
-  
-  // Margin ensures the counterbore doesn't break through the top edge.
-  // Counterbore radius is boltDia * 0.9. Add 1mm buffer.
-  const yMargin = (boltDia * 0.9) + 1.0;
-  
-  // Clamp Y center to be within the jaw blank's vertical extent
+
+  // Counterbore radius the CSG will actually cut, + 1 mm safety buffer.
+  const counterboreR = (boltDia * COUNTERBORE_DIA_K) / 2;
+  const yMargin      = counterboreR + 1.0;
+
+  // Clamp Y centre to remain inside the jaw blank with full counterbore room.
   const yCenter = Math.max(
     jawBaseY + yMargin,
-    Math.min(jawTopY - yMargin, nominalY)
+    Math.min(jawTopY - yMargin, nominalY),
   );
 
   // Z must fit within the narrower of (jaw face) and (pillar Z width) so the
@@ -89,8 +110,11 @@ export function computeMountingHolePositions(
     zs.push(Math.min(zMax, Math.max(zMin, offset)));
   }
 
+  // Right jaw tracks the part via xCenterRight; left stays fixed at -xCenterLeft.
+  // (Mirroring the same magnitude was the old behaviour but is wrong once the
+  // right jaw moves — left would falsely follow the right's translation.)
   const right: HolePosition[] = zs.map((z) => ({ x:  xCenterRight, y: yCenter, z }));
-  const left:  HolePosition[] = zs.map((z) => ({ x: -xCenterRight, y: yCenter, z }));
+  const left:  HolePosition[] = zs.map((z) => ({ x: -xCenterLeft,  y: yCenter, z }));
 
   return { left, right };
 }

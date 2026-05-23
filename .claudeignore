@@ -1,0 +1,9 @@
+# .gitignore already covers node_modules/, dist/, .vite/, .vscode/, etc.
+# This file is for paths Claude should skip that AREN'T in .gitignore.
+
+# Stray untracked folder from a previous session — not part of the codebase.
+Microsoft/
+
+# Memory snapshots are point-in-time; auto-reading them risks acting on stale state.
+# (The user's per-project memory under ~/.claude/projects/ is loaded separately.)
+memories/

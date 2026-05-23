@@ -44,5 +44,8 @@ export * from './offset';
 // Export Utilities
 export * from './export';
 
+// Swept Volume (slice → accumulate → loft pipeline)
+export * from './sweep';
+
 // Workers
 export * from './workers';
