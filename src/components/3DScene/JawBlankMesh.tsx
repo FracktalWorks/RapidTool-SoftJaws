@@ -34,7 +34,6 @@ import {
 import {
   jawBaseH,
   bracketInnerX,
-  pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
 import { rightJawCenterX } from '@/utils/partGeometry';
 
@@ -70,39 +69,54 @@ export function JawBlankMesh() {
   });
   const { face, height, thickness, material } = jawBlank;
 
-  const leftHoledGeo = useMemo(() => {
-    if (!holesGenerated) return null;
-    const cached = geometryCache.get(JAW_HOLED_CACHE_KEY_LEFT);
+  // Build a CACHED BufferGeometry from the holed-blank cache entry.
+  //
+  // Safety:
+  //   • Bail out if positions Float32Array is missing or empty — a
+  //     half-populated cache (e.g. mid auto-drill) would otherwise produce
+  //     a BufferGeometry with a count-0 position attribute, which crashes
+  //     drei's <Edges> during EdgesGeometry construction.
+  //   • Returns null on any invariant violation so the render falls back
+  //     to the raw boxGeometry branch.
+  function buildHoledGeometry(cacheKey: string): THREE.BufferGeometry | null {
+    const cached = geometryCache.get(cacheKey);
     if (!cached) return null;
+    if (!cached.positions || cached.positions.length === 0) return null;
+    if (cached.positions.length % 9 !== 0 && !cached.indices) return null;
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
-    geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
-    if (cached.indices) {
+    if (cached.normals && cached.normals.length === cached.positions.length) {
+      geo.setAttribute('normal', new THREE.BufferAttribute(cached.normals, 3));
+    } else {
+      // Fallback — make sure we never hand drei a geometry without normals.
+      geo.computeVertexNormals();
+    }
+    if (cached.indices && cached.indices.length > 0) {
       geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
     }
     return geo;
-  }, [holesGenerated]);
+  }
 
-  const rightHoledGeo = useMemo(() => {
-    if (!holesGenerated) return null;
-    const cached = geometryCache.get(JAW_HOLED_CACHE_KEY_RIGHT);
-    if (!cached) return null;
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
-    geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
-    if (cached.indices) {
-      geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
-    }
-    return geo;
-  }, [holesGenerated]);
+  const leftHoledGeo = useMemo(
+    () => (holesGenerated ? buildHoledGeometry(JAW_HOLED_CACHE_KEY_LEFT)  : null),
+    [holesGenerated],
+  );
+  const rightHoledGeo = useMemo(
+    () => (holesGenerated ? buildHoledGeometry(JAW_HOLED_CACHE_KEY_RIGHT) : null),
+    [holesGenerated],
+  );
 
-  // Clean up GPU memory for cached geometries
+  // Per-geometry dispose effects.  The previous shared effect disposed BOTH
+  // geometries whenever EITHER changed — fine today because they're driven
+  // by the same `holesGenerated` flag, but a foundational lifecycle bug
+  // waiting for a side-by-side regeneration to trigger a use-after-dispose.
   useEffect(() => {
-    return () => {
-      leftHoledGeo?.dispose();
-      rightHoledGeo?.dispose();
-    };
-  }, [leftHoledGeo, rightHoledGeo]);
+    return () => { leftHoledGeo?.dispose(); };
+  }, [leftHoledGeo]);
+  useEffect(() => {
+    return () => { rightHoledGeo?.dispose(); };
+  }, [rightHoledGeo]);
 
   // Left jaw is fixed to the left L-bracket. Right jaw uses the shared
   // rightJawCenterX helper — same source of truth as ViseModel's bracket
@@ -110,14 +124,19 @@ export function JawBlankMesh() {
   const { centerY, leftXOff, rightXOff, renderFace, labelSize } = useMemo(() => {
     const baseY     = jawBaseH(viseConfig.jawHeight);
     const innerX    = bracketInnerX(viseConfig);
-    const maxFace   = pillarFaceWidth(viseConfig);
     const fixedXOff = innerX - thickness / 2;
 
     return {
       centerY:    baseY + height / 2,
       leftXOff:   fixedXOff,
       rightXOff:  rightJawCenterX(viseConfig, jawBlank, activePart, clampGap),
-      renderFace: Math.min(face, maxFace * 0.98),
+      // Jaw face uses the user's jawBlank.face directly — does NOT clamp to
+      // pillarFaceWidth(viseConfig). The jaw blank is a separate piece of
+      // stock from the vise; changing vise jawWidth/jawHeight/jawStroke
+      // should not silently resize the jaw. If `face` exceeds the bracket
+      // pillar width, the jaw overhangs visibly — that's the correct cue
+      // for the user to either widen the vise or narrow the jaw stock.
+      renderFace: face,
       labelSize:  height * 0.09,
     };
   }, [viseConfig, jawBlank, face, height, thickness, activePart, clampGap]);
@@ -137,16 +156,31 @@ export function JawBlankMesh() {
           <group key={sign}>
 
             {holedGeo ? (
-              /* Drilled blank — using CSG geometry with baked position */
+              /*
+               * Drilled blank — geometry is now cached in LOCAL frame (centred
+               * at origin). Apply the world position via mesh.position so we
+               * can re-position the blank as viseConfig / activePart / clampGap
+               * change WITHOUT re-running CSG. This is the key win of the
+               * local-frame cache strategy: position changes are free.
+               *
+               * `<primitive attach="geometry">` (not geometry={obj} prop)
+               * guarantees r3f sets the geometry during the same commit step
+               * as the mesh, avoiding the race where drei's <Edges> mounted
+               * with parent.geometry still undefined.
+               *
+               * No <Edges> here — three-bvh-csg's output has hundreds of
+               * stitching triangles whose face-normal noise trips
+               * EdgesGeometry's dihedral threshold and paints diagonal scratch
+               * lines across the blank. Flat shading reads cleanly on its own.
+               */
               <mesh
-                geometry={holedGeo}
-                position={[0, 0, 0]}
+                position={[x, centerY, 0]}
                 castShadow
                 receiveShadow
                 raycast={() => {}}
               >
+                <primitive object={holedGeo} attach="geometry" />
                 <meshStandardMaterial color={color} roughness={0.90} metalness={0.30} />
-                <Edges color="#08090c" lineWidth={1} threshold={35} />
               </mesh>
             ) : (
               /* Raw stock blank */

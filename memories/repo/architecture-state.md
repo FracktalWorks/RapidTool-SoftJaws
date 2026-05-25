@@ -39,4 +39,3 @@
 - `.github/instructions/*.instructions.md` — Copilot frontmatter format; same intent as the per-directory `CLAUDE.md` files.
 - `.claude/agents/softjaws-{architect,coder,verifier}.md` — Subagent definitions.
     
-

@@ -23,7 +23,6 @@ import { useViseStore } from '@/stores/viseStore';
 import {
   jawBaseH,
   bracketInnerX,
-  pillarFaceWidth,
   viseBodyLen,
   VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
@@ -67,7 +66,9 @@ function computeSceneBox(
         (activePart.boundingBox.max[0] - activePart.boundingBox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
       )
     : fixedXOff;
-  const blankFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * 0.98);
+  // Independent stock — see JawBlankMesh. Camera bbox should include the
+  // jaw at its actual face dimension even if it overhangs the pillar.
+  const blankFace = jawBlank.face;
   box.union(new THREE.Box3(
     new THREE.Vector3(-adaptiveXOff - jawBlank.thickness / 2, baseH,                   -blankFace / 2),
     new THREE.Vector3( adaptiveXOff + jawBlank.thickness / 2, baseH + jawBlank.height,  blankFace / 2),

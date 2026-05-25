@@ -5,9 +5,17 @@
  * space coords (geometry was baked with mesh.matrixWorld before CSG), so
  * the meshes render at position [0, 0, 0].
  *
- * Cache priority per side: holed > profile.
- *   - JAW_HOLED_CACHE_KEY_*   = profile + drilled mounting holes (3rd CSG pass)
- *   - JAW_PROFILE_CACHE_KEY_* = profile only (2nd CSG pass, pocket from part)
+ * Cache: always `JAW_PROFILE_CACHE_KEY_*`.
+ *
+ * Architecture note: in the current "holes are part of the blank" workflow,
+ * useJawProfile uses the cached `JAW_HOLED_*` blank (drilled by AppShell's
+ * auto-drill) as the base geometry it cuts the pocket INTO. The result
+ * stored in `JAW_PROFILE_*` already contains BOTH the bolt holes AND the
+ * cavity — so this component just renders it directly. The earlier logic
+ * `holesReady ? JAW_HOLED : JAW_PROFILE` was a leftover from the old
+ * 3-step pipeline and caused the carved profile to disappear as soon as
+ * the auto-drill finished (JAW_HOLED contains only the holes, not the
+ * cavity, so picking it hides the cavity).
  *
  * When jawProfile.generated is true this component replaces JawBlankMesh
  * in Scene3D — the profile IS the blank after the pocket subtraction.
@@ -21,8 +29,6 @@ import {
   geometryCache,
   JAW_PROFILE_CACHE_KEY_LEFT,
   JAW_PROFILE_CACHE_KEY_RIGHT,
-  JAW_HOLED_CACHE_KEY_LEFT,
-  JAW_HOLED_CACHE_KEY_RIGHT,
 } from '@/stores/geometryCache';
 import { rightJawCenterX, effectiveClampGap } from '@/utils/partGeometry';
 
@@ -43,7 +49,6 @@ function buildGeometry(cacheKey: string): THREE.BufferGeometry | null {
 
 export function JawProfileMesh() {
   const profileReady = useSoftJawsStore((s) => s.jawProfile.generated);
-  const holesReady   = useSoftJawsStore((s) => s.mountingHoles.generated);
   const jawProfile   = useSoftJawsStore((s) => s.jawProfile);
   const jawBlank     = useSoftJawsStore((s) => s.jawBlank);
   const clampGap     = useSoftJawsStore((s) => s.clampGap);
@@ -71,15 +76,13 @@ export function JawProfileMesh() {
 
   const geos = useMemo(() => {
     if (!profileReady) return null;
-    // Prefer the holed result (3rd CSG pass) when present; fall back to the
-    // pocket-only profile.
-    const leftKey  = holesReady ? JAW_HOLED_CACHE_KEY_LEFT  : JAW_PROFILE_CACHE_KEY_LEFT;
-    const rightKey = holesReady ? JAW_HOLED_CACHE_KEY_RIGHT : JAW_PROFILE_CACHE_KEY_RIGHT;
-    const left  = buildGeometry(leftKey);
-    const right = buildGeometry(rightKey);
+    // Always JAW_PROFILE — it's cut FROM the holed blank, so holes are
+    // already baked in. JAW_HOLED contains only holes (no cavity).
+    const left  = buildGeometry(JAW_PROFILE_CACHE_KEY_LEFT);
+    const right = buildGeometry(JAW_PROFILE_CACHE_KEY_RIGHT);
     if (!left || !right) return null;
     return { left, right };
-  }, [profileReady, holesReady]);
+  }, [profileReady]);
 
   // Free the GPU buffers of the OLD geometries whenever `geos` is replaced
   // or this component unmounts. Without this every Generate Profile click

@@ -30,7 +30,6 @@ import {
 import {
   jawBaseH,
   bracketInnerX,
-  pillarFaceWidth,
 } from '@/features/vise-config/data/presets';
 import { computeWorldSpanX, rightJawCenterX } from '@/utils/partGeometry';
 
@@ -56,11 +55,6 @@ const MIN_VALID_FACE_COUNT = 24;
  *  multi-megabyte buffers to the GPU and can trip a WebGL context loss.
  *  Bail before that happens with a clear error message. */
 const MAX_VALID_FACE_COUNT = 150_000;
-
-/** Margin between the rendered jaw face Z and the pillar Z width — the jaw
- *  visually fits inside the pillar without overhang. Matches the value used
- *  by JawBlankMesh's `renderFace = Math.min(face, maxFace * 0.98)`. */
-const FACE_FIT_K = 0.98;
 
 // ─── Helper: build a positioned blank mesh ────────────────────────────────────
 
@@ -139,7 +133,6 @@ export function useJawProfile(): UseJawProfileReturn {
     activePart,
     clampGap,
     updateJawProfile,
-    updateMountingHoles,
   } =
     useSoftJawsStore();
   const viseConfig = useViseStore((s) => s.viseConfig);
@@ -149,11 +142,18 @@ export function useJawProfile(): UseJawProfileReturn {
     setError(null);
     setFaceCount(null);
     setStatus('running');
+    // ONLY clear the JAW_PROFILE cache.  Do NOT touch JAW_HOLED — the holed
+    // blank is the BASE GEOMETRY this CSG cuts into, and it's populated by
+    // AppShell's auto-drill.  Previously this hook deleted JAW_HOLED and
+    // also called updateMountingHoles({ generated: false }), which:
+    //   (a) forced getBaseGeo() to fall back to a raw blank box (no holes),
+    //       so the CSG cut a profile into an UN-holed blank, and
+    //   (b) triggered AppShell's auto-drill effect to re-run in parallel,
+    //       eventually overwriting JAW_HOLED with a holed-but-un-profiled
+    //       blank — which JawProfileMesh then preferred over JAW_PROFILE,
+    //       making the carved profile invisible.
     geometryCache.delete(JAW_PROFILE_CACHE_KEY_LEFT);
     geometryCache.delete(JAW_PROFILE_CACHE_KEY_RIGHT);
-    geometryCache.delete(JAW_HOLED_CACHE_KEY_LEFT);
-    geometryCache.delete(JAW_HOLED_CACHE_KEY_RIGHT);
-    updateMountingHoles({ generated: false });
 
     // ── Input validation — specific error per failure mode ────────────────
     const partId = activePart ?? parts[0]?.id ?? null;
@@ -190,13 +190,13 @@ export function useJawProfile(): UseJawProfileReturn {
     }
 
     // ── Geometry layout ─────────────────────────────────────────────────────
-    // Soft jaws are bolted to the L-bracket pillars. Face is capped to the
-    // pillar Z width so the jaw never overhangs the platform (mirrors the
-    // JawBlankMesh render exactly via FACE_FIT_K).
+    // Soft jaws are independent stock; jaw face uses jawBlank.face directly,
+    // NOT clamped to pillarFaceWidth. Changing viseConfig should not silently
+    // resize the jaw — matches the JawBlankMesh render exactly.
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
     const blankY     = baseH + jawBlank.height / 2;
-    const renderFace = Math.min(jawBlank.face, pillarFaceWidth(viseConfig) * FACE_FIT_K);
+    const renderFace = jawBlank.face;
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
     const leftXCenter  = -(innerX - jawBlank.thickness / 2);
@@ -205,19 +205,29 @@ export function useJawProfile(): UseJawProfileReturn {
     const partSpanX    = computeWorldSpanX(part);
     const snapX        = leftFaceX + clampGap + partSpanX / 2;
 
-    // ── Build left & right blanks, using JAW_HOLED if present, or raw blank box ──
+    // ── Build left & right blanks ────────────────────────────────────────────
+    //
+    // JAW_HOLED is now cached at LOCAL frame (origin-centred). Apply the
+    // world translation (xCenter, blankY, 0) here so the CSG that produces
+    // JAW_PROFILE sees the blank at the correct world position relative to
+    // the workpiece. JAW_PROFILE remains world-baked because the cavity
+    // shape depends on the workpiece's actual world position/rotation.
     const getBaseGeo = (cacheKey: string, xCenter: number) => {
       const cached = geometryCache.get(cacheKey);
       if (cached) {
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(cached.positions, 3));
-        geo.setAttribute('normal',   new THREE.BufferAttribute(cached.normals,   3));
+        // Reconstruct the local-frame holed geometry from the cache.
+        const local = new THREE.BufferGeometry();
+        local.setAttribute('position', new THREE.BufferAttribute(cached.positions.slice(), 3));
+        local.setAttribute('normal',   new THREE.BufferAttribute(cached.normals.slice(),   3));
         if (cached.indices) {
-          geo.setIndex(new THREE.BufferAttribute(cached.indices, 1));
+          local.setIndex(new THREE.BufferAttribute(cached.indices.slice(), 1));
         }
-        return geo;
+        // Translate from local to world coords for the CSG.
+        local.translate(xCenter, blankY, 0);
+        return local;
       }
 
+      // Fallback: no drill yet — bake a raw blank box at world coords.
       const mesh = buildBlankMesh(
         jawBlank.thickness,
         jawBlank.height,
@@ -339,7 +349,6 @@ export function useJawProfile(): UseJawProfileReturn {
     viseConfig,
     clampGap,
     updateJawProfile,
-    updateMountingHoles,
   ]);
 
   return { status, error, faceCount, generate };

@@ -22,8 +22,6 @@ import { ViseModel } from './3DScene/ViseModel';
 import { JawBlankMesh } from './3DScene/JawBlankMesh';
 import { JawProfileMesh } from './3DScene/JawProfileMesh';
 import { PartMeshes } from './3DScene/PartMeshes';
-import { PillarBoltDecals } from './3DScene/PillarBoltDecals';
-import { JawBoltDecorations } from './3DScene/JawBoltDecorations';
 import { CavityPreview } from './3DScene/CavityPreview';
 
 /** Offline-safe lighting fallback — matches warehouse HDRI tone */
@@ -81,14 +79,16 @@ export function Scene3D() {
         */}
       {profileReady ? <JawProfileMesh /> : <JawBlankMesh />}
 
-      {/* Bracket back-face bolt-exit decoration — factory hardware,
-          always visible from frame 1. */}
-      <PillarBoltDecals />
+      {/* PillarBoltDecals (outer-face bolt-exit decoration) removed per
+          user request — the bracket pillar's inner-face tapped holes are
+          still rendered inside ViseModel via PillarTappedHole, which is
+          the only side that needs decoration. */}
 
-      {/* Jaw inner-face counterbore preview — shows where Step-6 CSG will
-          drill the mounting holes. Hides itself once the real holes are
-          in the JAW_HOLED cache (the geometry then carries the holes). */}
-      <JawBoltDecorations />
+      {/* JawBoltDecorations removed — the fake decoration → real CSG flicker
+          was the source of the "3–4 s pop-in" the user reported. With the
+          local-frame cache (see useMountingHoles + JawBlankMesh) the JAW_HOLED
+          geometry survives all position-only changes, so position changes no
+          longer take the jaw through the decoration phase. */}
 
       {/* Step-4 cavity preview — translucent ghost of the workpiece swept
           into each jaw by `pocket depth`. Hides itself once the profile

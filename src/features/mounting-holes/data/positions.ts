@@ -23,8 +23,6 @@
 
 import {
   bracketInnerX,
-  bracketBoltY,
-  pillarFaceWidth,
   jawBaseH,
 } from '@/features/vise-config/data/presets';
 import { rightJawCenterX } from '@/utils/partGeometry';
@@ -94,9 +92,10 @@ export function computeMountingHolePositions(
     Math.min(jawTopY - yMargin, nominalY),
   );
 
-  // Z must fit within the narrower of (jaw face) and (pillar Z width) so the
-  // hole emerges cleanly through both pieces.
-  const zExtent = Math.min(jawBlank.face, pillarFaceWidth(viseConfig));
+  // Z must fit within the jaw's own face width — bolt holes are drilled into
+  // the jaw stock, not the pillar. Decoupled from viseConfig so hole positions
+  // stay definitive when the user adjusts vise dimensions.
+  const zExtent = jawBlank.face;
   const margin  = boltDia * EDGE_MARGIN_K;
   const zMax    =  zExtent / 2 - margin;
   const zMin    = -zMax;

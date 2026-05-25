@@ -21,7 +21,6 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
-import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
 import { rightBracketInnerX, effectiveClampGap } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
@@ -90,29 +89,9 @@ function TopBolt({ x, y, z, r }: { x: number; y: number; z: number; r: number })
   );
 }
 
-// Tapped through-hole on pillar inner (workpiece-facing) face — coaxial with the
-// jaw counterbore. r should be at bore scale (boltDia * 0.50) so chamR matches
-// the jaw's through-bore, completing the visual fastener path.
-function PillarTappedHole({
-  x, y, z, r, sign,
-}: { x: number; y: number; z: number; r: number; sign: 1 | -1 }) {
-  const chamR = r * 1.15;  // slight chamfer ring around tapped bore entry
-  const boreR = r * 0.72;  // tapped bore — slightly smaller than jaw bore
-  const eps   = 0.06;
-  const rotY  = sign === 1 ? -Math.PI / 2 : Math.PI / 2;
-  return (
-    <group position={[x - sign * eps, y, z]}>
-      <mesh rotation={[0, rotY, 0]}>
-        <circleGeometry args={[chamR, 40]} />
-        <meshStandardMaterial color={HOLE_RG} roughness={0.28} metalness={0.90} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh rotation={[0, rotY, 0]} position={[-sign * 0.01, 0, 0]}>
-        <circleGeometry args={[boreR, 40]} />
-        <meshStandardMaterial color={HOLE_BK} roughness={0.88} metalness={0.12} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-  );
-}
+// PillarTappedHole removed — see comment in the ViseModel JSX. Bracket pillar
+// is rendered as a plain Box; no inner-face hole decoration. Add real CSG
+// drilling on the bracket if a visual through-path is needed later.
 
 // U-slot on flange ±Z faces — open to the bottom edge, represents T-slot bolt
 // clearance. Shown as a dark rectangle with a bright machined rim, bottom-aligned
@@ -151,7 +130,6 @@ function FlangeUSlot({ x, flangeHalfZ, slotW }: {
 export function ViseModel() {
   const viseConfig     = useViseStore((s) => s.viseConfig);
   const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
-  const mountingHoles  = useSoftJawsStore((s) => s.mountingHoles);
   const clampGap       = useSoftJawsStore((s) => s.clampGap);
   const jawProfile     = useSoftJawsStore((s) => s.jawProfile);
   const activePart = useSoftJawsStore((s) => {
@@ -174,16 +152,12 @@ export function ViseModel() {
     [viseConfig, jawBlank, activePart, renderClampGap],
   );
 
-  // Pillar face tapped-hole positions — same layout as jaw counterbores.
-  // Right-side positions track the part (via rightJawCenterX inside the helper)
-  // so pillar decorations follow the moving bracket carriage.
-  const pillarHoles = useMemo(
-    () => computeMountingHolePositions(viseConfig, jawBlank, mountingHoles, activePart, renderClampGap),
-    [viseConfig, jawBlank, mountingHoles, activePart, renderClampGap],
-  );
-  // Match the visual bolt scale that JawBlankMesh uses so the decals are coaxial.
-  const pillarBoltDia = Math.min(jawBlank.thickness * 0.30, jawBlank.face * 0.16);
-  const pillarHoleR   = pillarBoltDia * 0.50;   // bore-level radius for tapped hole
+  // (pillarHoles + pillarBoltDia + pillarHoleR previously fed PillarTappedHole
+  // decals on the pillar inner face. Those decals were removed because they
+  // floated as visible artifacts when the jaw face was narrower than the
+  // pillar Z width. No replacement needed for now — bracket renders as a
+  // clean Box. If real CSG holes through the bracket are added later, they
+  // will reuse the local-frame hole positions from useMountingHoles.)
 
   // Flange — bottom mounting lip with T-slot U-slots.
   const flangeHalfZ  = d.tier1W * 1.10 / 2;
@@ -294,17 +268,22 @@ export function ViseModel() {
               />
             ))}
 
-            {/* Coaxial tapped-hole decals on pillar inner face — align with jaw counterbores */}
-            {(sign === 1 ? pillarHoles.right : pillarHoles.left).map((hole) => (
-              <PillarTappedHole
-                key={`pt_${sign}_${hole.z}`}
-                x={innerFaceX}
-                y={hole.y}
-                z={hole.z}
-                r={pillarHoleR}
-                sign={sign}
-              />
-            ))}
+            {/*
+              PillarTappedHole decals removed.
+
+              They were drawn as DoubleSide planes at the bracket's inner
+              face. When the jaw blank's face dimension was smaller than the
+              bracket pillar's Z width (e.g. user shrinks jaw.face or expands
+              vise.jawWidth), the decals stuck out beyond the jaw's footprint
+              and read as "decoration artifacts" floating in mid-air beside
+              the pillar — exactly what the user reported.
+
+              The bracket pillar now renders as a plain Box. If a follow-up
+              feature is wanted, drill REAL CSG holes through the pillar
+              (same pattern as useMountingHoles' local-frame cache) — that
+              would also let the user visually verify the through-path from
+              outside the vise.
+            */}
           </group>
         );
       })}

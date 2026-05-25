@@ -220,19 +220,48 @@ export function AppShell() {
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(true);
 
   const { generated: holesGenerated } = useSoftJawsStore((s) => s.mountingHoles);
-  const { generate: generateHoles } = useMountingHoles();
+  const { generate: generateHoles, error: drillError } = useMountingHoles();
 
-  // Auto-drill mounting holes when parameters change
+  // Auto-drill mounting holes when parameters change.
+  //
+  // We log any failure to the console explicitly. Previously the holeCSGWorker
+  // silently returned the un-drilled baseplate on CSG failure — the cache
+  // ended up with a flat blank that LOOKED drilled in the viewport (faint
+  // shading suggested holes) but exported as a hole-less STL. The worker is
+  // now fixed to throw on failure, but the auto-drill is fire-and-forget so
+  // we surface the rejection here.
   useEffect(() => {
     if (!holesGenerated) {
-      generateHoles();
+      generateHoles().catch((err) => {
+        // Don't swallow — print the CSG failure so the user (and any open
+        // devtools session) can see exactly why drilling failed.
+        // eslint-disable-next-line no-console
+        console.error('[AppShell] Auto-drill failed:', err);
+      });
     }
   }, [holesGenerated, generateHoles]);
 
-  // Cross-store invalidation: any change to viseConfig (different store) must
-  // mark the cached jaw profile as stale, since the CSG result was baked
-  // against the OLD vise dimensions. Same-store fields already invalidate
-  // inside softJawsStore actions.
+  // Bubble the auto-drill error to the console for visibility. (Hook keeps
+  // it in state; the auto-drill effect above has no UI to render it.)
+  useEffect(() => {
+    if (drillError) {
+      // eslint-disable-next-line no-console
+      console.error('[useMountingHoles]', drillError);
+    }
+  }, [drillError]);
+
+  // Cross-store invalidation on viseConfig change:
+  //
+  //   jawProfile.generated → INVALIDATE. The cavity CSG is baked in WORLD
+  //     frame against the OLD workpiece position (workpiece position is
+  //     derived from bracketInnerX), so a new vise dimension would render
+  //     the cavity at a stale location relative to the new workpiece position.
+  //
+  //   mountingHoles.generated → DO NOT INVALIDATE. JAW_HOLED is cached in
+  //     LOCAL frame and survives any vise dimension change — JawBlankMesh
+  //     re-positions the holed blank via mesh.position at render time. This
+  //     is what eliminates the 3–4 s "decoration → real holes" pop-in the
+  //     user was hitting on every vise parameter tweak.
   useEffect(() => {
     let prev = useViseStore.getState().viseConfig;
     return useViseStore.subscribe((state) => {
@@ -240,9 +269,6 @@ export function AppShell() {
         prev = state.viseConfig;
         if (useSoftJawsStore.getState().jawProfile.generated) {
           useSoftJawsStore.getState().updateJawProfile({ generated: false });
-        }
-        if (useSoftJawsStore.getState().mountingHoles.generated) {
-          useSoftJawsStore.getState().updateMountingHoles({ generated: false });
         }
       }
     });

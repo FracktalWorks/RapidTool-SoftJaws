@@ -82,12 +82,15 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
           state.parts.push(part);
           if (!state.activePart) state.activePart = part.id;
           state.jawProfile.generated = false;
+          // mountingHoles.generated is NOT invalidated — JAW_HOLED is now
+          // cached at LOCAL frame, so changes that only MOVE the blank
+          // (active-part swap, bracket carriage motion) don't require a
+          // re-drill. JawBlankMesh just re-renders the cached local geo
+          // at the new world position via mesh.position.
         }),
 
       removePart: (id) => {
         // Pair the state update with cache deletion — CLAUDE.md Invariant 2.
-        // Float32Arrays in geometryCache live outside the store; without this
-        // delete, removed parts leak ~MB of geometry until page reload.
         geometryCache.delete(id);
         set((state) => {
           state.parts = state.parts.filter((p) => p.id !== id);
@@ -95,6 +98,7 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
             state.activePart = state.parts[0]?.id ?? null;
           }
           state.jawProfile.generated = false;
+          // No mountingHoles invalidation — see addPart comment.
         });
       },
 
@@ -102,6 +106,7 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
         set((state) => {
           state.activePart = id;
           state.jawProfile.generated = false;
+          // No mountingHoles invalidation — see addPart comment.
         }),
 
       updatePartTransform: (id, transform) =>
@@ -128,7 +133,12 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
             Math.abs(part.transform.rotation.y - ry) > EPS ||
             Math.abs(part.transform.rotation.z - rz) > EPS;
 
-          if (moved) state.jawProfile.generated = false;
+          if (moved) {
+            state.jawProfile.generated = false;
+            // No mountingHoles invalidation — JAW_HOLED is cached at LOCAL
+            // frame, so bracket motion (driven by computeWorldSpanX(part))
+            // is just a render-time mesh.position change. See addPart.
+          }
         }),
 
       updateJawBlank: (config) =>
