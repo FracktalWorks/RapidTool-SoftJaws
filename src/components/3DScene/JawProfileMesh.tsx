@@ -69,8 +69,8 @@ export function JawProfileMesh() {
   const rightMeshOffsetX = useMemo(() => {
     if (!profileReady || !activePart) return 0;
     const effective = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
-    return rightJawCenterX(viseConfig, jawBlank, activePart, effective)
-         - rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+    return rightJawCenterX(viseConfig, jawBlank, activePart, effective, true)
+         - rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap, false);
   }, [profileReady, activePart, viseConfig, jawBlank, jawProfile]);
 
   const geos = useMemo(() => {

@@ -196,7 +196,7 @@ export function useJawProfile(): UseJawProfileReturn {
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
     const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
-    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile.jawOverlap);
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile.jawOverlap, false);
     const leftFaceX    = -innerX + jawBlank.left.thickness;
     const partSpanX    = computeWorldSpanX(part);
     const snapX        = leftFaceX - jawProfile.jawOverlap + partSpanX / 2;

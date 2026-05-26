@@ -113,7 +113,7 @@ export function JawBoltDecorations() {
 
   const data = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap,
+      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap, jawProfile.generated,
     );
     const cboreR = mountingHoles.screwheadDiameter / 2;
     return { left, right, cboreR };

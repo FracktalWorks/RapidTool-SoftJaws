@@ -111,7 +111,7 @@ export function PillarBoltDecals() {
 
   const decals = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap,
+      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap, jawProfile.generated,
     );
 
     // Left bracket is fixed at the max-stroke position.
@@ -120,7 +120,7 @@ export function PillarBoltDecals() {
 
     // Right bracket TRACKS the part — same formula ViseModel uses to render
     // the moving pillar, so the decals land on the actual pillar back face.
-    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap);
+    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap, jawProfile.generated);
     const rightOuterX    =  rightInnerXAbs + VISE_GEOMETRY.BR_PILLAR_LEN;
 
     const throughR = mountingHoles.boltSize / 2 + HOLE_CLEARANCE;

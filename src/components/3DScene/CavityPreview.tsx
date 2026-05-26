@@ -89,7 +89,7 @@ export function CavityPreview() {
 
     // Same source-of-truth math as PartMeshes / JawBlankMesh / useJawProfile.
     const leftFaceX    = -innerX + jawBlank.left.thickness;          // left jaw inner face
-    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap, jawProfile.generated);
     const rightFaceX   = rightCenter - jawBlank.right.thickness / 2;  // right jaw inner face
 
     const partSpanX    = computeWorldSpanX(activePart);

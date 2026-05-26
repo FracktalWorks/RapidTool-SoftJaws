@@ -105,7 +105,7 @@ export function JawBlankMesh() {
   const overlap = useMemo(() => effectiveOverlap(jawProfile.jawOverlap, jawProfile), [jawProfile]);
 
   const leftXOff = useMemo(() => innerX - jawBlank.left.thickness / 2, [innerX, jawBlank.left.thickness]);
-  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, overlap), [viseConfig, jawBlank, activePart, overlap]);
+  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, overlap, jawProfile.generated), [viseConfig, jawBlank, activePart, overlap, jawProfile.generated]);
 
   const leftCenterY = useMemo(() => baseY + jawBlank.left.height / 2, [baseY, jawBlank.left.height]);
   const rightCenterY = useMemo(() => baseY + jawBlank.right.height / 2, [baseY, jawBlank.right.height]);

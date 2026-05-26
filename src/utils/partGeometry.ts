@@ -58,9 +58,10 @@ export function rightBracketInnerX(
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
   overlap:    number,
+  generated?: boolean,
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
-  if (!activePart) return fixedInnerX;
+  if (!activePart || !generated) return fixedInnerX;
   const worldWidth    = computeWorldSpanX(activePart);
   const leftFaceX     = -fixedInnerX + jawBlank.left.thickness;
   const partRightEdge = leftFaceX - overlap + worldWidth;
@@ -79,8 +80,9 @@ export function rightJawCenterX(
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
   overlap:    number,
+  generated?: boolean,
 ): number {
-  return rightBracketInnerX(viseConfig, jawBlank, activePart, overlap)
+  return rightBracketInnerX(viseConfig, jawBlank, activePart, overlap, generated)
        - jawBlank.right.thickness / 2;
 }
 
