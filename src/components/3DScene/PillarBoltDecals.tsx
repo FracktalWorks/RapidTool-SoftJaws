@@ -31,7 +31,7 @@ import {
   bracketInnerX,
   VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
-import { rightBracketInnerX, effectiveClampGap } from '@/utils/partGeometry';
+import { rightBracketInnerX, effectiveOverlap } from '@/utils/partGeometry';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
 
 const HOLE_DARK_COLOR = '#0a0c10';
@@ -100,19 +100,18 @@ export function PillarBoltDecals() {
   const viseConfig    = useViseStore((s) => s.viseConfig);
   const jawBlank      = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles = useSoftJawsStore((s) => s.mountingHoles);
-  const clampGap      = useSoftJawsStore((s) => s.clampGap);
   const jawProfile    = useSoftJawsStore((s) => s.jawProfile);
   const activePart    = useSoftJawsStore((s) => {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
 
-  // RENDER-TIME clampGap.  Tracks the moving carriage post-profile.
-  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
+  // RENDER-TIME overlap. Tracks the moving carriage post-profile.
+  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
 
   const decals = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderClampGap,
+      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap,
     );
 
     // Left bracket is fixed at the max-stroke position.
@@ -121,13 +120,13 @@ export function PillarBoltDecals() {
 
     // Right bracket TRACKS the part — same formula ViseModel uses to render
     // the moving pillar, so the decals land on the actual pillar back face.
-    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, renderClampGap);
+    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap);
     const rightOuterX    =  rightInnerXAbs + VISE_GEOMETRY.BR_PILLAR_LEN;
 
     const throughR = mountingHoles.boltSize / 2 + HOLE_CLEARANCE;
 
     return { throughR, leftOuterX, rightOuterX, left, right };
-  }, [viseConfig, jawBlank, mountingHoles, activePart, renderClampGap]);
+  }, [viseConfig, jawBlank, mountingHoles, activePart, renderOverlap]);
 
   const { throughR, leftOuterX, rightOuterX, left, right } = decals;
 

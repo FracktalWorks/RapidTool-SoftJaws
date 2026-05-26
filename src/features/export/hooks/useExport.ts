@@ -76,15 +76,15 @@ export function useExport(): UseExportReturn {
     setTimeout(() => {
       try {
         const sides = [
-          { label: 'Left',  holedKey: JAW_HOLED_CACHE_KEY_LEFT,  profileKey: JAW_PROFILE_CACHE_KEY_LEFT  },
-          { label: 'Right', holedKey: JAW_HOLED_CACHE_KEY_RIGHT, profileKey: JAW_PROFILE_CACHE_KEY_RIGHT },
+          { label: 'Left',  holedKey: JAW_HOLED_CACHE_KEY_LEFT,  profileKey: JAW_PROFILE_CACHE_KEY_LEFT,  dims: jawBlank.left  },
+          { label: 'Right', holedKey: JAW_HOLED_CACHE_KEY_RIGHT, profileKey: JAW_PROFILE_CACHE_KEY_RIGHT, dims: jawBlank.right },
         ] as const;
 
-        for (const { label, holedKey, profileKey } of sides) {
+        for (const { label, holedKey, profileKey, dims } of sides) {
           const cached = geometryCache.get(profileKey) ?? geometryCache.get(holedKey);
           const mesh   = cached
             ? cachedToMesh(cached)
-            : buildBlankMesh(jawBlank.thickness, jawBlank.height, jawBlank.face);
+            : buildBlankMesh(dims.thickness, dims.height, dims.face);
 
           const stlData = meshToSTL(mesh, { binary: true });
           downloadFile(stlData, `SoftJaw-${label}.stl`, 'application/sla');

@@ -183,37 +183,29 @@ export function useJawProfile(): UseJawProfileReturn {
       return;
     }
 
-    if (jawProfile.depth >= jawBlank.thickness) {
-      setError(`Pocket depth (${jawProfile.depth} mm) must be less than jaw thickness (${jawBlank.thickness} mm).`);
+    const minThickness = Math.min(jawBlank.left.thickness, jawBlank.right.thickness);
+    if (jawProfile.depth >= minThickness) {
+      setError(`Pocket depth (${jawProfile.depth} mm) must be less than jaw thickness (${minThickness} mm).`);
       setStatus('error');
       return;
     }
 
     // ── Geometry layout ─────────────────────────────────────────────────────
-    // Soft jaws are independent stock; jaw face uses jawBlank.face directly,
-    // NOT clamped to pillarFaceWidth. Changing viseConfig should not silently
-    // resize the jaw — matches the JawBlankMesh render exactly.
     const baseH      = jawBaseH(viseConfig.jawHeight);
     const innerX     = bracketInnerX(viseConfig);
-    const blankY     = baseH + jawBlank.height / 2;
-    const renderFace = jawBlank.face;
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
-    const leftXCenter  = -(innerX - jawBlank.thickness / 2);
-    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, clampGap);
-    const leftFaceX    = -innerX + jawBlank.thickness;
+    const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile.jawOverlap);
+    const leftFaceX    = -innerX + jawBlank.left.thickness;
     const partSpanX    = computeWorldSpanX(part);
-    const snapX        = leftFaceX + clampGap + partSpanX / 2;
+    const snapX        = leftFaceX - jawProfile.jawOverlap + partSpanX / 2;
 
     // ── Build left & right blanks ────────────────────────────────────────────
-    //
-    // JAW_HOLED is now cached at LOCAL frame (origin-centred). Apply the
-    // world translation (xCenter, blankY, 0) here so the CSG that produces
-    // JAW_PROFILE sees the blank at the correct world position relative to
-    // the workpiece. JAW_PROFILE remains world-baked because the cavity
-    // shape depends on the workpiece's actual world position/rotation.
-    const getBaseGeo = (cacheKey: string, xCenter: number) => {
+    const getBaseGeo = (cacheKey: string, xCenter: number, side: 'left' | 'right') => {
       const cached = geometryCache.get(cacheKey);
+      const dims = jawBlank[side];
+      const blankY = baseH + dims.height / 2;
       if (cached) {
         // Reconstruct the local-frame holed geometry from the cache.
         const local = new THREE.BufferGeometry();
@@ -229,9 +221,9 @@ export function useJawProfile(): UseJawProfileReturn {
 
       // Fallback: no drill yet — bake a raw blank box at world coords.
       const mesh = buildBlankMesh(
-        jawBlank.thickness,
-        jawBlank.height,
-        renderFace,
+        dims.thickness,
+        dims.height,
+        dims.face,
         xCenter,
         blankY,
       );
@@ -240,8 +232,8 @@ export function useJawProfile(): UseJawProfileReturn {
       return geo;
     };
 
-    const leftGeo  = getBaseGeo(JAW_HOLED_CACHE_KEY_LEFT, leftXCenter);
-    const rightGeo = getBaseGeo(JAW_HOLED_CACHE_KEY_RIGHT, rightXCenter);
+    const leftGeo  = getBaseGeo(JAW_HOLED_CACHE_KEY_LEFT, leftXCenter, 'left');
+    const rightGeo = getBaseGeo(JAW_HOLED_CACHE_KEY_RIGHT, rightXCenter, 'right');
 
     // The worker positions the part at `partHeight/2 + transform.y`, which
     // would land it with its bottom at world Y = 0. The scene's PartMeshes

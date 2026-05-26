@@ -59,15 +59,15 @@ const EDGE_MARGIN_K = 1.0;  // hole edge must clear face/pillar edge by ≥ 1× 
  */
 export function computeMountingHolePositions(
   viseConfig:    Pick<ViseConfig, 'jawWidth' | 'jawHeight' | 'jawStroke'>,
-  jawBlank:      Pick<JawBlankConfig, 'thickness' | 'face' | 'height'>,
+  jawBlank:      JawBlankConfig,
   mountingHoles: Pick<MountingHolesConfig, 'count' | 'spacing' | 'boltSize' | 'holesHeight' | 'screwheadDiameter'>,
   activePart:    ProcessedPart | null,
-  clampGap:      number,
+  overlap:       number,
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
   // Right side tracks the part; left stays at the fixed max-stroke position.
-  const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, clampGap);
-  const xCenterLeft  = innerX - jawBlank.thickness / 2;
+  const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, overlap);
+  const xCenterLeft  = innerX - jawBlank.left.thickness / 2;
   const jawBaseY     = jawBaseH(viseConfig.jawHeight);
   const nominalY     = jawBaseY + mountingHoles.holesHeight;
 
@@ -75,12 +75,11 @@ export function computeMountingHolePositions(
   const spacing = Math.max(0, mountingHoles.spacing);
   const boltDia = mountingHoles.boltSize;
 
-  // --- P2 FIX: Y-Clamping (now sourced from the same counterboreR
-  // that buildHoleTool actually uses, so the planned margin matches the
-  // counterbore the CSG will cut. Single source of truth — no drift.) ---
-  //
+  const minHeight = Math.min(jawBlank.left.height, jawBlank.right.height);
+  const minFace = Math.min(jawBlank.left.face, jawBlank.right.face);
+
   // Clamp so the counterbore stays fully inside [jawBaseY, jawTopY].
-  const jawTopY  = jawBaseY + jawBlank.height;
+  const jawTopY  = jawBaseY + minHeight;
 
   // Counterbore radius the CSG will actually cut, + 1 mm safety buffer.
   const counterboreR = mountingHoles.screwheadDiameter / 2;
@@ -92,10 +91,8 @@ export function computeMountingHolePositions(
     Math.min(jawTopY - yMargin, nominalY),
   );
 
-  // Z must fit within the jaw's own face width — bolt holes are drilled into
-  // the jaw stock, not the pillar. Decoupled from viseConfig so hole positions
-  // stay definitive when the user adjusts vise dimensions.
-  const zExtent = jawBlank.face;
+  // Z must fit within the jaw's own face width.
+  const zExtent = minFace;
   const margin  = boltDia * EDGE_MARGIN_K;
   const zMax    =  zExtent / 2 - margin;
   const zMin    = -zMax;

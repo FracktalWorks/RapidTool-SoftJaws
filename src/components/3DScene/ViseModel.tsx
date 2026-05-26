@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
-import { rightBracketInnerX, effectiveClampGap } from '@/utils/partGeometry';
+import { rightBracketInnerX, effectiveOverlap } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
@@ -130,7 +130,6 @@ function FlangeUSlot({ x, flangeHalfZ, slotW }: {
 export function ViseModel() {
   const viseConfig     = useViseStore((s) => s.viseConfig);
   const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
-  const clampGap       = useSoftJawsStore((s) => s.clampGap);
   const jawProfile     = useSoftJawsStore((s) => s.jawProfile);
   const activePart = useSoftJawsStore((s) => {
     const id = s.activePart;
@@ -138,9 +137,9 @@ export function ViseModel() {
   });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
-  // RENDER-TIME clampGap.  Once the profile is generated, the right
-  // bracket carriage closes on the workpiece — see effectiveClampGap.
-  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
+  // RENDER-TIME overlap. Once the profile is generated, the right
+  // bracket carriage closes on the workpiece — see effectiveOverlap.
+  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
 
   // Left L-bracket is ALWAYS fixed (the static jaw of a milling vise).
   // Right L-bracket carriage tracks the rotated world-space right edge of the
@@ -148,8 +147,8 @@ export function ViseModel() {
   // exits on the same moved face (no more floating decals).
   const leftInnerX = bracketInnerX(viseConfig);
   const rightInnerX = useMemo(
-    () => rightBracketInnerX(viseConfig, jawBlank, activePart, renderClampGap),
-    [viseConfig, jawBlank, activePart, renderClampGap],
+    () => rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap),
+    [viseConfig, jawBlank, activePart, renderOverlap],
   );
 
   // (pillarHoles + pillarBoltDia + pillarHoleR previously fed PillarTappedHole

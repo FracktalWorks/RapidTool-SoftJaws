@@ -25,7 +25,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, effectiveClampGap } from '@/utils/partGeometry';
+import { computeWorldSpanX, effectiveOverlap, partSnapX } from '@/utils/partGeometry';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -59,16 +59,14 @@ function PartMesh({
   const meshRef = useRef<THREE.Mesh>(null);
   const geomData = geometryCache.get(part.id);
   const updatePartTransform = useSoftJawsStore((s) => s.updatePartTransform);
-  const clampGap = useSoftJawsStore((s) => s.clampGap);
   const jawProfile = useSoftJawsStore((s) => s.jawProfile);
-  const jawBlankThickness = useSoftJawsStore((s) => s.jawBlank.thickness);
+  const jawBlank = useSoftJawsStore((s) => s.jawBlank);
   const viseConfig = useViseStore((s) => s.viseConfig);
 
   // Once profile.generated, the workpiece slides into the left cavity by
-  // (depth − safety) mm — mirrors the right jaw closing in by 2× that. See
-  // effectiveClampGap. Before profile generation it's a no-op (returns
-  // designClampGap unchanged).
-  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
+  // (depth − safety) mm. Before profile generation it's a no-op (returns
+  // jawOverlap unchanged).
+  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
   // While true, useLayoutEffect must NOT re-apply store values.
@@ -114,23 +112,17 @@ function PartMesh({
   // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
   // We must use the WIDTH (delta), NOT bbox.min[0] which is the original file coordinate.
   //
-  // DESIGN snapX: Always uses the design-time clampGap. This is the source of truth
+  // DESIGN snapX: Always uses the design-time jawOverlap. This is the source of truth
   // for the store and CSG subtraction.
   const designSnapX = useMemo(() => {
-    const leftInnerX = bracketInnerX(viseConfig);
-    const leftFaceX  = -leftInnerX + jawBlankThickness;
-    const worldWidth = computeWorldSpanX(part);
-    return leftFaceX + clampGap + worldWidth / 2;
-  }, [viseConfig, jawBlankThickness, clampGap, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile.jawOverlap);
+  }, [viseConfig, jawBlank.left.thickness, jawProfile.jawOverlap, part]);
 
-  // RENDER snapX: Uses the effective (possibly shifted) clampGap. This is what
+  // RENDER snapX: Uses the effective (possibly shifted) overlap. This is what
   // the user sees in the 3D viewport.
   const renderSnapX = useMemo(() => {
-    const leftInnerX = bracketInnerX(viseConfig);
-    const leftFaceX  = -leftInnerX + jawBlankThickness;
-    const worldWidth = computeWorldSpanX(part);
-    return leftFaceX + renderClampGap + worldWidth / 2;
-  }, [viseConfig, jawBlankThickness, renderClampGap, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, renderOverlap);
+  }, [viseConfig, jawBlank.left.thickness, renderOverlap, part]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {

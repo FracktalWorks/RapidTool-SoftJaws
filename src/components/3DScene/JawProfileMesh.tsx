@@ -30,7 +30,7 @@ import {
   JAW_PROFILE_CACHE_KEY_LEFT,
   JAW_PROFILE_CACHE_KEY_RIGHT,
 } from '@/stores/geometryCache';
-import { rightJawCenterX, effectiveClampGap } from '@/utils/partGeometry';
+import { rightJawCenterX, effectiveOverlap } from '@/utils/partGeometry';
 
 function buildGeometry(cacheKey: string): THREE.BufferGeometry | null {
   const cached = geometryCache.get(cacheKey);
@@ -51,7 +51,6 @@ export function JawProfileMesh() {
   const profileReady = useSoftJawsStore((s) => s.jawProfile.generated);
   const jawProfile   = useSoftJawsStore((s) => s.jawProfile);
   const jawBlank     = useSoftJawsStore((s) => s.jawBlank);
-  const clampGap     = useSoftJawsStore((s) => s.clampGap);
   const viseConfig   = useViseStore((s) => s.viseConfig);
   const activePart   = useSoftJawsStore((s) => {
     const id = s.activePart;
@@ -61,7 +60,7 @@ export function JawProfileMesh() {
   // RIGHT-MESH POST-CLAMP SHIFT
   //
   // The CSG SUBTRACTION was computed with the right jaw centred at
-  // `rightJawCenterX(..., designClampGap)` and the resulting world-space
+  // `rightJawCenterX(..., designOverlap)` and the resulting world-space
   // mesh was baked at that position. After profile.generated we want the
   // right jaw to APPEAR shifted inward — but we mustn't re-bake the CSG.
   // The fix: render the right mesh with a position offset equal to the
@@ -69,10 +68,10 @@ export function JawProfileMesh() {
   // For the LEFT mesh this delta is always zero (left bracket is fixed).
   const rightMeshOffsetX = useMemo(() => {
     if (!profileReady || !activePart) return 0;
-    const effective = effectiveClampGap(clampGap, jawProfile);
+    const effective = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
     return rightJawCenterX(viseConfig, jawBlank, activePart, effective)
-         - rightJawCenterX(viseConfig, jawBlank, activePart, clampGap);
-  }, [profileReady, activePart, viseConfig, jawBlank, clampGap, jawProfile]);
+         - rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+  }, [profileReady, activePart, viseConfig, jawBlank, jawProfile]);
 
   const geos = useMemo(() => {
     if (!profileReady) return null;

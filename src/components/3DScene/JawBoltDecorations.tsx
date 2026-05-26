@@ -38,7 +38,7 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
-import { effectiveClampGap } from '@/utils/partGeometry';
+import { effectiveOverlap } from '@/utils/partGeometry';
 
 const HOLE_DARK_COLOR  = '#06080c';
 const HOLE_RING_COLOR  = '#2f343b';   // slightly darker than the bracket rim so the
@@ -101,7 +101,6 @@ export function JawBoltDecorations() {
   const viseConfig     = useViseStore((s) => s.viseConfig);
   const jawBlank       = useSoftJawsStore((s) => s.jawBlank);
   const mountingHoles  = useSoftJawsStore((s) => s.mountingHoles);
-  const clampGap       = useSoftJawsStore((s) => s.clampGap);
   const jawProfile     = useSoftJawsStore((s) => s.jawProfile);
   const holesGenerated = useSoftJawsStore((s) => s.mountingHoles.generated);
   const activePart     = useSoftJawsStore((s) => {
@@ -110,29 +109,28 @@ export function JawBoltDecorations() {
   });
 
   // Decals track the moving carriage post-profile.
-  const renderClampGap = effectiveClampGap(clampGap, jawProfile);
+  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
 
   const data = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderClampGap,
+      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap,
     );
     const cboreR = mountingHoles.screwheadDiameter / 2;
-    const halfThickness = jawBlank.thickness / 2;
-    return { left, right, cboreR, halfThickness };
-  }, [viseConfig, jawBlank, mountingHoles, activePart, renderClampGap]);
+    return { left, right, cboreR };
+  }, [viseConfig, jawBlank, mountingHoles, activePart, renderOverlap]);
 
   // Once real CSG holes exist (JAW_HOLED cache), the geometry itself shows the
   // counterbore — decorations would visually double up. Hide.
   if (holesGenerated) return null;
 
-  const { left, right, cboreR, halfThickness } = data;
+  const { left, right, cboreR } = data;
 
   return (
     <group>
       {right.map((p, i) => (
         <JawCounterbore
           key={`r${i}`}
-          faceX={p.x - halfThickness}
+          faceX={p.x - jawBlank.right.thickness / 2}
           y={p.y}
           z={p.z}
           cboreR={cboreR}
@@ -142,7 +140,7 @@ export function JawBoltDecorations() {
       {left.map((p, i) => (
         <JawCounterbore
           key={`l${i}`}
-          faceX={p.x + halfThickness}
+          faceX={p.x + jawBlank.left.thickness / 2}
           y={p.y}
           z={p.z}
           cboreR={cboreR}

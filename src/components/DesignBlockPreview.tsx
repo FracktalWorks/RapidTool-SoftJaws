@@ -79,17 +79,17 @@ function resolve(
 
   if (hovered.scope === 'jaw') {
     const boxDims: [number, number, number] = [
-      jawBlank.thickness,   // R3F X = Trinckle X
-      jawBlank.height,      // R3F Y = Trinckle Z
-      jawBlank.face,        // R3F Z = Trinckle Y
+      jawBlank.left.thickness,   // R3F X = Trinckle X
+      jawBlank.left.height,      // R3F Y = Trinckle Z
+      jawBlank.left.face,        // R3F Z = Trinckle Y
     ];
     switch (hovered.field) {
       case 'thickness':
-        return { boxDims, axis: 'x', arrowR3F: 'x', value: jawBlank.thickness, label: 'Length', material: JAW_MATERIAL };
+        return { boxDims, axis: 'x', arrowR3F: 'x', value: jawBlank.left.thickness, label: 'Length', material: JAW_MATERIAL };
       case 'height':
-        return { boxDims, axis: 'z', arrowR3F: 'y', value: jawBlank.height,    label: 'Height', material: JAW_MATERIAL };
+        return { boxDims, axis: 'z', arrowR3F: 'y', value: jawBlank.left.height,    label: 'Height', material: JAW_MATERIAL };
       case 'face':
-        return { boxDims, axis: 'y', arrowR3F: 'z', value: jawBlank.face,      label: 'Width',  material: JAW_MATERIAL };
+        return { boxDims, axis: 'y', arrowR3F: 'z', value: jawBlank.left.face,      label: 'Width',  material: JAW_MATERIAL };
     }
   }
 
@@ -97,9 +97,9 @@ function resolve(
     // Show the jaw blank with a partial arrow along X — the arrow cuts
     // inward from the inner face by `depth`, visualising the pocket.
     const boxDims: [number, number, number] = [
-      jawBlank.thickness,
-      jawBlank.height,
-      jawBlank.face,
+      jawBlank.left.thickness,
+      jawBlank.left.height,
+      jawBlank.left.face,
     ];
     if (hovered.field === 'depth') {
       return {
@@ -116,9 +116,9 @@ function resolve(
 
   if (hovered.scope === 'holes') {
     const boxDims: [number, number, number] = [
-      jawBlank.thickness,   // R3F X = Trinckle X
-      jawBlank.height,      // R3F Y = Trinckle Z
-      jawBlank.face,        // R3F Z = Trinckle Y
+      jawBlank.left.thickness,   // R3F X = Trinckle X
+      jawBlank.left.height,      // R3F Y = Trinckle Z
+      jawBlank.left.face,        // R3F Z = Trinckle Y
     ];
     switch (hovered.field) {
       case 'boltSize':

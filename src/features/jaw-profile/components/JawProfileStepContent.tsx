@@ -12,9 +12,9 @@ const BACK_WALL_MIN = 5;
 
 export function JawProfileStepContent() {
   const jawProfile        = useSoftJawsStore((s) => s.jawProfile);
+  const jawBlank          = useSoftJawsStore((s) => s.jawBlank);
   const partCount         = useSoftJawsStore((s) => s.parts.length);
   const profileGenerated  = useSoftJawsStore((s) => s.jawProfile.generated);
-  const jawThickness      = useSoftJawsStore((s) => s.jawBlank.thickness);
   const activePart        = useSoftJawsStore((s) => {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
@@ -35,9 +35,11 @@ export function JawProfileStepContent() {
     [activePart],
   );
 
+  const minThickness = Math.min(jawBlank.left.thickness, jawBlank.right.thickness);
+
   // Pocket depth must leave at least BACK_WALL_MIN of stock behind it,
   // otherwise the CSG cuts through the jaw and the part has no back wall.
-  const depthMax = Math.max(1, jawThickness - BACK_WALL_MIN);
+  const depthMax = Math.max(1, minThickness - BACK_WALL_MIN);
   const handleDepthChange = (raw: number) => {
     const clamped = Math.max(1, Math.min(depthMax, raw));
     updateJawProfile({ depth: clamped });
@@ -133,7 +135,7 @@ export function JawProfileStepContent() {
           </div>
         </label>
         <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5 -mt-1.5">
-          Depth cut into the jaw along the clamping axis. Leaves {(jawThickness - jawProfile.depth).toFixed(1)} mm back-wall stock.
+          Depth cut into the jaw along the clamping axis. Leaves {(minThickness - jawProfile.depth).toFixed(1)} mm back-wall stock.
         </p>
       </div>
 

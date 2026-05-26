@@ -45,24 +45,36 @@ export interface ViseConfig {
   customName?: string;
 }
 
+export interface JawDimensions {
+  face: number;
+  height: number;
+  thickness: number;
+}
+
 /**
  * Soft-jaw blank stock. Axis-named fields prevent the field-vs-axis
  * confusion that previously hit JawBlankStepContent.
  */
 export interface JawBlankConfig {
-  /** Z extent — along the jaw face, typically matches viseConfig.jawWidth */
-  face: number;
-  /** Y extent — vertical height of the blank */
-  height: number;
-  /** X extent — thickness sticking out from the carriage toward the workpiece */
-  thickness: number;
+  left: JawDimensions;
+  right: JawDimensions;
+  linkJaws: boolean;
   material: string;
+  isDragging?: boolean;
+}
+
+export interface UpdateJawBlankConfig {
+  left?: Partial<JawDimensions>;
+  right?: Partial<JawDimensions>;
+  linkJaws?: boolean;
+  material?: string;
   isDragging?: boolean;
 }
 
 export interface JawProfileConfig {
   clearance: number;
   depth: number;
+  jawOverlap: number;
   generated: boolean;
 }
 

@@ -13,6 +13,7 @@ import type {
   ProcessedPart,
   PartTransform,
   JawBlankConfig,
+  UpdateJawBlankConfig,
   JawProfileConfig,
   GripFeaturesConfig,
   MountingHolesConfig,
@@ -22,7 +23,8 @@ import type {
 function applyAutoPositioning(state: any, viseConfig: ViseConfig) {
   if (!state.mountingHoles.autoPosition) return;
 
-  const { face, height } = state.jawBlank;
+  const minFace = Math.min(state.jawBlank.left.face, state.jawBlank.right.face);
+  const minHeight = Math.min(state.jawBlank.left.height, state.jawBlank.right.height);
   const boltSize = state.mountingHoles.boltSize;
   const screwheadDiameter = state.mountingHoles.screwheadDiameter;
 
@@ -32,19 +34,19 @@ function applyAutoPositioning(state: any, viseConfig: ViseConfig) {
 
   // If jaw face width is too small to fit 2 holes with standard spacing plus margin, set count to 1
   const minFaceForTwoHoles = pitch + boltSize * 2.0; // edge margin of 1x bolt diameter on each side
-  if (face < minFaceForTwoHoles) {
+  if (minFace < minFaceForTwoHoles) {
     state.mountingHoles.count = 1;
   } else {
     state.mountingHoles.count = 2;
   }
 
-  // 2. Holes Height (clamped to stay inside the jaw blank safely)
+  // 2. Holes Height (clamped to stay inside BOTH jaw blanks safely)
   const counterboreR = screwheadDiameter / 2;
   const yMargin = counterboreR + 1.0;
   const yMin = yMargin;
-  const yMax = Math.max(yMin, height - yMargin);
-  const nominalH = height * 0.45;
-  state.mountingHoles.holesHeight = Math.max(yMin, Math.min(yMax, nominalH));
+  const yMax = Math.max(yMin, minHeight - yMargin);
+  // Do NOT scale holesHeight with height. Keep it at its current value, just clamp it.
+  state.mountingHoles.holesHeight = Math.max(yMin, Math.min(yMax, state.mountingHoles.holesHeight || 30.0));
 }
 
 const INITIAL_STATE: SoftJawsState = {
@@ -52,15 +54,16 @@ const INITIAL_STATE: SoftJawsState = {
   activePart: null,
   clampGap: 0.01,
   jawBlank: {
-    face: 150.0,       // Z, matches jawWidth
-    height: 65.0,      // Y, matches jawHeight
-    thickness: 30.0,   // X stick-out from carriage — typical soft-jaw stock
+    left: { face: 150.0, height: 65.0, thickness: 30.0 },
+    right: { face: 150.0, height: 65.0, thickness: 30.0 },
+    linkJaws: true,
     material: 'aluminum-6061',
     isDragging: false,
   },
   jawProfile: {
     clearance: 0.2,
     depth: 5,
+    jawOverlap: 5.0,
     generated: false,
   },
   gripFeatures: {
@@ -90,7 +93,7 @@ export interface SoftJawsActions {
   removePart: (id: string) => void;
   setActivePart: (id: string | null) => void;
   updatePartTransform: (id: string, transform: Partial<PartTransform>) => void;
-  updateJawBlank: (config: Partial<JawBlankConfig>) => void;
+  updateJawBlank: (config: UpdateJawBlankConfig) => void;
   updateJawProfile: (config: Partial<JawProfileConfig>) => void;
   updateGripFeatures: (config: Partial<GripFeaturesConfig>) => void;
   updateMountingHoles: (config: Partial<MountingHolesConfig>) => void;
@@ -176,16 +179,42 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
 
       updateJawBlank: (config) =>
         set((state) => {
-          Object.assign(state.jawBlank, config);
+          if (config.linkJaws !== undefined) {
+            state.jawBlank.linkJaws = config.linkJaws;
+            if (config.linkJaws) {
+              state.jawBlank.right = { ...state.jawBlank.left };
+            }
+          }
+          if (config.material !== undefined) {
+            state.jawBlank.material = config.material;
+          }
+          if (config.isDragging !== undefined) {
+            state.jawBlank.isDragging = config.isDragging;
+          }
+
+          if (config.left !== undefined) {
+            Object.assign(state.jawBlank.left, config.left);
+            if (state.jawBlank.linkJaws) {
+              state.jawBlank.right = { ...state.jawBlank.left };
+            }
+          }
+
+          if (config.right !== undefined) {
+            Object.assign(state.jawBlank.right, config.right);
+            if (state.jawBlank.linkJaws) {
+              state.jawBlank.left = { ...state.jawBlank.right };
+            }
+          }
+
           state.jawProfile.generated = false;
+
+          const affectsLeft = config.left && (config.left.height !== undefined || config.left.thickness !== undefined || config.left.face !== undefined);
+          const affectsRight = config.right && (config.right.height !== undefined || config.right.thickness !== undefined || config.right.face !== undefined);
           
-          // Only invalidate mounting holes if height/thickness/face changed and we are NOT dragging.
-          // During drag, we want to hold off on auto-drilling.
-          const affectsHoles = config.height !== undefined || config.thickness !== undefined || config.face !== undefined;
-          if (affectsHoles && !state.jawBlank.isDragging) {
+          if ((affectsLeft || affectsRight) && !state.jawBlank.isDragging) {
             state.mountingHoles.generated = false;
           }
-          
+
           const viseConfig = useViseStore.getState().viseConfig;
           applyAutoPositioning(state, viseConfig);
         }),

@@ -46,10 +46,10 @@ const PREVIEW_OPACITY = 0.35;
 
 export function CavityPreview() {
   const activeStep       = useWorkflowStore((s) => s.activeStep);
-  const profileGenerated = useSoftJawsStore((s) => s.jawProfile.generated);
-  const pocketDepth      = useSoftJawsStore((s) => s.jawProfile.depth);
+  const jawProfile       = useSoftJawsStore((s) => s.jawProfile);
+  const profileGenerated = jawProfile.generated;
+  const pocketDepth      = jawProfile.depth;
   const jawBlank         = useSoftJawsStore((s) => s.jawBlank);
-  const clampGap         = useSoftJawsStore((s) => s.clampGap);
   const viseConfig       = useViseStore((s) => s.viseConfig);
   const activePart       = useSoftJawsStore((s) => {
     const id = s.activePart;
@@ -88,9 +88,9 @@ export function CavityPreview() {
     const innerX       = bracketInnerX(viseConfig);
 
     // Same source-of-truth math as PartMeshes / JawBlankMesh / useJawProfile.
-    const leftFaceX    = -innerX + jawBlank.thickness;          // left jaw inner face
-    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, clampGap);
-    const rightFaceX   = rightCenter - jawBlank.thickness / 2;  // right jaw inner face
+    const leftFaceX    = -innerX + jawBlank.left.thickness;          // left jaw inner face
+    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+    const rightFaceX   = rightCenter - jawBlank.right.thickness / 2;  // right jaw inner face
 
     const partSpanX    = computeWorldSpanX(activePart);
     const partHeight   = activePart.boundingBox.max[1] - activePart.boundingBox.min[1];
@@ -120,7 +120,7 @@ export function CavityPreview() {
       xScale,
       rotation: activePart.transform.rotation,
     };
-  }, [activePart, jawBlank, viseConfig, clampGap, pocketDepth]);
+  }, [activePart, jawBlank, viseConfig, jawProfile, pocketDepth]);
 
   if (activeStep !== 'jaw-profile') return null;
   if (profileGenerated)             return null;

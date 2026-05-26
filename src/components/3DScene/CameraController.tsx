@@ -27,6 +27,9 @@ import {
   VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
 
+import type { JawBlankConfig, JawProfileConfig, ProcessedPart } from '@/stores/types';
+import { rightBracketInnerX } from '@/utils/partGeometry';
+
 // Fraction of viewport the scene should occupy after fit (lower = more padding)
 const FIT_MARGIN = 0.55;
 
@@ -34,9 +37,9 @@ const FIT_MARGIN = 0.55;
 
 function computeSceneBox(
   viseConfig: { jawWidth: number; jawHeight: number; jawStroke: number },
-  jawBlank: { face: number; height: number; thickness: number },
-  parts: { boundingBox: { min: [number, number, number]; max: [number, number, number] } }[],
-  clampGap: number,
+  jawBlank: JawBlankConfig,
+  parts: ProcessedPart[],
+  jawProfile: JawProfileConfig,
 ): THREE.Box3 {
   const box = new THREE.Box3();
 
@@ -57,21 +60,22 @@ function computeSceneBox(
   // Jaw blank and parts sit on the rail surface, not the ground plane
   const baseH = jawBaseH(viseConfig.jawHeight);
 
-  const innerX     = bracketInnerX(viseConfig);
-  const fixedXOff  = innerX - jawBlank.thickness / 2;
-  const activePart = parts[parts.length - 1]; // most-recently imported
-  const adaptiveXOff = activePart
-    ? Math.min(
-        fixedXOff,
-        (activePart.boundingBox.max[0] - activePart.boundingBox.min[0]) / 2 + clampGap + jawBlank.thickness / 2,
-      )
-    : fixedXOff;
-  // Independent stock — see JawBlankMesh. Camera bbox should include the
-  // jaw at its actual face dimension even if it overhangs the pillar.
-  const blankFace = jawBlank.face;
+  const activePart = parts[parts.length - 1] ?? null; // most-recently imported
+  const leftInnerX = bracketInnerX(viseConfig);
+  const rightInnerX = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+
+  // Left jaw box
+  const leftFace = jawBlank.left.face;
   box.union(new THREE.Box3(
-    new THREE.Vector3(-adaptiveXOff - jawBlank.thickness / 2, baseH,                   -blankFace / 2),
-    new THREE.Vector3( adaptiveXOff + jawBlank.thickness / 2, baseH + jawBlank.height,  blankFace / 2),
+    new THREE.Vector3(-leftInnerX, baseH, -leftFace / 2),
+    new THREE.Vector3(-leftInnerX + jawBlank.left.thickness, baseH + jawBlank.left.height, leftFace / 2)
+  ));
+
+  // Right jaw box
+  const rightFace = jawBlank.right.face;
+  box.union(new THREE.Box3(
+    new THREE.Vector3(rightInnerX - jawBlank.right.thickness, baseH, -rightFace / 2),
+    new THREE.Vector3(rightInnerX, baseH + jawBlank.right.height, rightFace / 2)
   ));
 
   // Parts: centered in X/Z, sitting on rail surface
@@ -166,18 +170,18 @@ export function CameraController() {
   const parts      = useSoftJawsStore((s) => s.parts);
   const jawBlank   = useSoftJawsStore((s) => s.jawBlank);
   const viseConfig = useViseStore((s) => s.viseConfig);
-  const clampGap   = useSoftJawsStore((s) => s.clampGap);
+  const jawProfile = useSoftJawsStore((s) => s.jawProfile);
 
   const prevCountRef  = useRef<number>(parts.length);
   const hasInitFitted = useRef(false);
 
   // Memoise the current scene center so the orientation handler is stable
   const getSceneCenter = useCallback(() => {
-    const box = computeSceneBox(viseConfig, jawBlank, parts, clampGap);
+    const box = computeSceneBox(viseConfig, jawBlank, parts, jawProfile);
     const center = new THREE.Vector3();
     box.getCenter(center);
     return center;
-  }, [viseConfig, jawBlank, parts]);
+  }, [viseConfig, jawBlank, parts, jawProfile]);
 
   // ── Initial fit: wait until OrbitControls are mounted ──────────────────
   useEffect(() => {
@@ -187,7 +191,7 @@ export function CameraController() {
     hasInitFitted.current = true;
 
     const t = setTimeout(() => {
-      const box = computeSceneBox(viseConfig, jawBlank, parts, clampGap);
+      const box = computeSceneBox(viseConfig, jawBlank, parts, jawProfile);
       fitCameraToBox(box, camera, gl, controls);
     }, 80);
 
@@ -202,9 +206,9 @@ export function CameraController() {
 
     if (parts.length === 0 || parts.length <= prevCount) return;
 
-    const box = computeSceneBox(viseConfig, jawBlank, parts, clampGap);
+    const box = computeSceneBox(viseConfig, jawBlank, parts, jawProfile);
     fitCameraToBox(box, camera, gl, controls);
-  }, [parts, viseConfig, jawBlank, camera, gl, controls]);
+  }, [parts, viseConfig, jawBlank, jawProfile, camera, gl, controls]);
 
   // ── Re-fit when vise dimensions change (after initial fit has run) ───────
   // Debounced so dragging a numeric input doesn't thrash the camera every tick.
@@ -212,7 +216,7 @@ export function CameraController() {
     if (!controls || !hasInitFitted.current) return;
 
     const t = setTimeout(() => {
-      const box = computeSceneBox(viseConfig, jawBlank, parts, clampGap);
+      const box = computeSceneBox(viseConfig, jawBlank, parts, jawProfile);
       fitCameraToBox(box, camera, gl, controls);
     }, 150);
 
@@ -222,7 +226,8 @@ export function CameraController() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     viseConfig.jawWidth, viseConfig.jawHeight, viseConfig.jawStroke,
-    jawBlank.face, jawBlank.height, jawBlank.thickness,
+    jawBlank.left.face, jawBlank.left.height, jawBlank.left.thickness,
+    jawBlank.right.face, jawBlank.right.height, jawBlank.right.thickness,
   ]);
 
   // ── View orientation snapping (header buttons) ────────────────────────────
