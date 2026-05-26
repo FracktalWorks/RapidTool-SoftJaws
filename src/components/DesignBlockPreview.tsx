@@ -545,9 +545,14 @@ export function DesignBlockPreview() {
   if (!resolved) return null;
 
   const { boxDims, axis, arrowR3F, value, label, material, partialLength } = resolved;
-  const maxDim    = Math.max(...boxDims);
-  const triadSize = maxDim * 0.30;
   const isHolesScope = hovered?.scope === 'holes';
+  const isViseScope = hovered?.scope === 'vise';
+
+  // Calculate maxDim with margin for the extra vise components if in vise scope
+  const maxDim = isViseScope
+    ? Math.max(boxDims[0] + 40, boxDims[1] + 20, boxDims[2])
+    : Math.max(...boxDims);
+  const triadSize = maxDim * 0.30;
 
   // Layout offsets: toolbar (56px) + context panel (320px) = 376px sidebar.
   // Leave a small gap so the card floats clear of the panel border.
@@ -564,15 +569,47 @@ export function DesignBlockPreview() {
               <directionalLight position={[10, 15, 8]} intensity={0.7} />
               <directionalLight position={[-8, 4, -5]} intensity={0.3} />
 
-              {/* The artefact — vise envelope (light steel) or jaw blank (forged) */}
-              <mesh>
-                <boxGeometry args={boxDims} />
-                <meshStandardMaterial
-                  color={material.color}
-                  roughness={material.roughness}
-                  metalness={material.metalness}
-                />
-              </mesh>
+              {isViseScope ? (
+                <group>
+                  {/* Vise Bed/Rail */}
+                  <mesh position={[0, -boxDims[1] / 2 - 10, 0]}>
+                    <boxGeometry args={[boxDims[0] + 40, 20, boxDims[2]]} />
+                    <meshStandardMaterial
+                      color={material.color}
+                      roughness={material.roughness}
+                      metalness={material.metalness}
+                    />
+                  </mesh>
+                  {/* Left Jaw Block (Fixed) */}
+                  <mesh position={[-(boxDims[0] / 2 + 10), 0, 0]}>
+                    <boxGeometry args={[20, boxDims[1], boxDims[2]]} />
+                    <meshStandardMaterial
+                      color={material.color}
+                      roughness={material.roughness}
+                      metalness={material.metalness}
+                    />
+                  </mesh>
+                  {/* Right Jaw Block (Movable) */}
+                  <mesh position={[boxDims[0] / 2 + 10, 0, 0]}>
+                    <boxGeometry args={[20, boxDims[1], boxDims[2]]} />
+                    <meshStandardMaterial
+                      color={material.color}
+                      roughness={material.roughness}
+                      metalness={material.metalness}
+                    />
+                  </mesh>
+                </group>
+              ) : (
+                /* The block — jaw blank (forged) */
+                <mesh>
+                  <boxGeometry args={boxDims} />
+                  <meshStandardMaterial
+                    color={material.color}
+                    roughness={material.roughness}
+                    metalness={material.metalness}
+                  />
+                </mesh>
+              )}
 
               {/* Highlighted dimension */}
               <DimensionArrow

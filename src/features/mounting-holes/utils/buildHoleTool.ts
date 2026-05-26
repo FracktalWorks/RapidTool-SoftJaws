@@ -99,40 +99,55 @@ export function buildHoleToolGeometry(
   const cbL     = cbDepth + THROUGH_OVERSHOOT;
 
   // ── Geometry of one cutter pair, in LOCAL coords ─────────────────────────
-  //
-  // sign=+1 (right blank):  inner face at  x = −thickness/2
-  //                         counterbore goes  +X  into the blank
-  //                         cylinder spans [−t/2 − OVERSHOOT, −t/2 + cbDepth]
-  //
-  // sign=−1 (left  blank):  inner face at  x = +thickness/2
-  //                         counterbore goes  −X  into the blank
-  //                         cylinder spans [+t/2 − cbDepth, +t/2 + OVERSHOOT]
-  //
-  // The overshoot is on the inner-face side ONLY (the side that would
-  // otherwise be coplanar with the blank surface).
-  const innerFaceX     = -sign * (thickness / 2);
-  const cbCenterOffset = innerFaceX + sign * ((cbDepth - THROUGH_OVERSHOOT) / 2);
-
   const parts: THREE.BufferGeometry[] = [];
 
   for (const p of positions) {
-    // Through-hole — centered at blank X centre, spans both faces.
-    const through = new THREE.CylinderGeometry(throughR, throughR, throughL, CYL_SEGMENTS);
-    through.rotateZ(Math.PI / 2);                // align cylinder axis to X
-    through.translate(p.x, p.y, p.z);
-    parts.push(through);
+    if (cbDepth > 0 && cbR > throughR) {
+      // Create a stepped cylinder using LatheGeometry to avoid intersecting/overlapping geometry.
+      // A self-intersecting cutter mesh (like nested cylinders) confuses three-bvh-csg,
+      // leaving a solid core inside the counterbore. A lathe profile creates a single,
+      // closed, manifold stepped cylinder with no internal faces.
+      const points: THREE.Vector2[] = [];
+      const totalL = thickness + THROUGH_OVERSHOOT * 2;
 
-    // Counterbore — shifted to sit on the inner face, depth = cbDepth.
-    if (cbDepth > 0 && cbR > 0) {
-      const cb = new THREE.CylinderGeometry(cbR, cbR, cbL, CYL_SEGMENTS);
-      cb.rotateZ(Math.PI / 2);
-      cb.translate(p.x + cbCenterOffset, p.y, p.z);
-      parts.push(cb);
+      // Profile in the X-Y plane (X is radius, Y is height along the axis).
+      // We define points from bottom (Y = -totalL/2) to top (Y = totalL/2).
+      // Since it goes bottom-to-top, LatheGeometry's normals point outwards.
+      //
+      // 1. Center of the through-hole exit cap
+      points.push(new THREE.Vector2(0, -totalL / 2));
+      // 2. Outer wall of the through-hole at the exit
+      points.push(new THREE.Vector2(throughR, -totalL / 2));
+      // 3. Inner corner of the counterbore shoulder (transition from through-hole)
+      points.push(new THREE.Vector2(throughR, totalL / 2 - cbL));
+      // 4. Outer corner of the counterbore shoulder (floor)
+      points.push(new THREE.Vector2(cbR, totalL / 2 - cbL));
+      // 5. Outer rim of the counterbore entrance
+      points.push(new THREE.Vector2(cbR, totalL / 2));
+      // 6. Center of the counterbore entrance cap
+      points.push(new THREE.Vector2(0, totalL / 2));
+
+      const lathe = new THREE.LatheGeometry(points, CYL_SEGMENTS);
+      lathe.rotateZ(Math.PI / 2); // align Y axis to X axis
+
+      if (sign === -1) {
+        // Rotate 180 degrees around Y to flip the counterbore from negative X to positive X
+        lathe.rotateY(Math.PI);
+      }
+
+      lathe.translate(p.x, p.y, p.z);
+      parts.push(lathe);
+    } else {
+      // Straight through-hole only
+      const through = new THREE.CylinderGeometry(throughR, throughR, throughL, CYL_SEGMENTS);
+      through.rotateZ(Math.PI / 2);
+      through.translate(p.x, p.y, p.z);
+      parts.push(through);
     }
   }
 
   const merged = mergeGeometries(parts, false);
-  // Per-cylinder buffers are now owned by `merged` — free the originals.
+  // Per-part buffers are now owned by `merged` — free the originals.
   for (const g of parts) g.dispose();
   return merged;
 }

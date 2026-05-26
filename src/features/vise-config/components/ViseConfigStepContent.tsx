@@ -18,15 +18,41 @@ type DimField = 'jawWidth' | 'jawHeight' | 'jawStroke';
 interface FieldSpec {
   label: string;
   axis:  Axis;     // Trinckle convention — drives colour + 3D arrow direction
+  trinckleLabel: string;
+  hint: string;
   min:   number;
   max:   number;
   step:  number;
 }
 
 const FIELD_SPECS: Record<DimField, FieldSpec> = {
-  jawStroke: { label: 'Max stroke',  axis: 'x', min: 100, max: 300, step: 10 },
-  jawWidth:  { label: 'Vise width',  axis: 'y', min:  50, max: 200, step:  5 },
-  jawHeight: { label: 'Vise height', axis: 'z', min:  50, max: 200, step:  5 },
+  jawStroke: {
+    label: 'Max stroke (X)',
+    axis: 'x',
+    trinckleLabel: 'Maximum clamp opening',
+    hint: 'The absolute maximum gap between the vise L-bracket inner faces when fully open.',
+    min: 100,
+    max: 300,
+    step: 10,
+  },
+  jawWidth: {
+    label: 'Vise width (Y)',
+    axis: 'y',
+    trinckleLabel: 'L-bracket face width',
+    hint: 'Width of the vise L-bracket pillar along the contact face. Caps the maximum width of the jaw blank.',
+    min: 50,
+    max: 200,
+    step: 5,
+  },
+  jawHeight: {
+    label: 'Vise height (Z)',
+    axis: 'z',
+    trinckleLabel: 'Base-to-rail height',
+    hint: 'The vertical height of the L-bracket pillar. Soft jaw blanks should be tall enough to clear this height.',
+    min: 50,
+    max: 200,
+    step: 5,
+  },
 };
 
 // Render order: X → Y → Z (Trinckle / CAD convention).
@@ -114,55 +140,40 @@ export function ViseConfigStepContent() {
           Fixed Hardware Dimensions
         </p>
         
-        {/* Helper Explanations Grid */}
-        <div className="grid grid-cols-3 gap-3 mb-3 pb-3 border-b border-border/40">
-           <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
-             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.x}`}>Max stroke (X):</span>
-             Gap between L-bracket inner faces.
-           </div>
-           <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
-             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.y}`}>Vise width (Y):</span>
-             Body / jaw-face depth along Y.
-           </div>
-           <div className="text-[9px] text-muted-foreground/80 font-tech leading-relaxed">
-             <span className={`font-semibold block mb-0.5 ${AXIS_TEXT_CLASS.z}`}>Vise height (Z):</span>
-             Base-to-rail vertical extent.
-           </div>
-        </div>
-
-        <div className="grid gap-2.5">
+        <div className="grid gap-3">
           {FIELDS.map((field) => {
-            const { label, axis, min, max, step } = FIELD_SPECS[field];
+            const { label, axis, trinckleLabel, hint, min, max, step } = FIELD_SPECS[field];
             const handleEnter = () => setHovered({ scope: 'vise', field });
             return (
               <label
                 key={field}
-                className="flex items-center justify-between group"
+                className="flex flex-col gap-1.5 group"
                 onMouseEnter={handleEnter}
                 onMouseLeave={clearHover}
               >
-                <span className={`text-xs font-medium tech-transition ${AXIS_TEXT_CLASS[axis]}`}>
-                  {label} ({axis.toUpperCase()})
-                  <span className="ml-1.5 text-[9px] text-muted-foreground/50 font-tech font-normal">
-                    {min}–{max}
-                  </span>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    step={step}
-                    value={viseConfig[field] ?? ''}
-                    onChange={(e) => handleDimChange(field, parseFloat(e.target.value) || 0)}
-                    onFocus={handleEnter}
-                    onBlur={clearHover}
-                    className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech focus:ring-1 focus:ring-primary/40 outline-none tech-transition hover:bg-background"
-                  />
-                  <span className="text-[10px] text-muted-foreground/60 font-tech w-4">
-                    mm
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className={`text-xs font-medium ${AXIS_TEXT_CLASS[axis]}`}>{label}</span>
+                    <span className="ml-2 text-[9px] text-muted-foreground/60 font-tech">{trinckleLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      step={step}
+                      value={viseConfig[field] ?? ''}
+                      onChange={(e) => handleDimChange(field, parseFloat(e.target.value) || 0)}
+                      onFocus={handleEnter}
+                      onBlur={clearHover}
+                      className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none tech-transition hover:bg-background focus:ring-1 focus:ring-primary/40"
+                    />
+                    <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+                  </div>
                 </div>
+                <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5">
+                  {hint}
+                </p>
               </label>
             );
           })}

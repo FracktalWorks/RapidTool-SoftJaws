@@ -80,10 +80,9 @@ function deserializeGeometry(data: SerializedGeometry): THREE.BufferGeometry {
   // mergeVertices(geo, 1e-5) welds positions within 0.01 µm of each other
   // into a single indexed vertex, restoring the manifold representation
   // three-bvh-csg needs. Same fix CSGEngine.cloneWorldGeometry applies.
-  if (!geometry.getIndex()) {
-    geometry = mergeVertices(geometry, 1e-5);
-    geometry.computeVertexNormals();
-  }
+  // We ALWAYS weld to consolidate coincident coordinates (e.g. from LatheGeometry caps or merged geometries).
+  geometry = mergeVertices(geometry, 1e-5);
+  geometry.computeVertexNormals();
 
   // Add UV attribute for CSG (three-bvh-csg requires it)
   if (!geometry.getAttribute('uv')) {

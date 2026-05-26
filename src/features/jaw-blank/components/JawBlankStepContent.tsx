@@ -203,6 +203,17 @@ export function JawBlankStepContent() {
         </p>
 
         <div className="grid gap-3">
+          {/* Auto-position toggle */}
+          <label className="flex items-center justify-between text-xs cursor-pointer pb-2 border-b border-border/30">
+            <span className="text-muted-foreground font-medium">Auto-position holes</span>
+            <input
+              type="checkbox"
+              checked={mountingHoles.autoPosition ?? false}
+              onChange={(e) => updateMountingHoles({ autoPosition: e.target.checked })}
+              className="w-4 h-4 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer"
+            />
+          </label>
+
           {/* Screw diameter */}
           <label
             className="flex items-center justify-between text-xs cursor-pointer"
@@ -275,20 +286,26 @@ export function JawBlankStepContent() {
                 <input
                   type="number" min={20} max={200} step={5}
                   value={mountingHoles.spacing}
+                  disabled={mountingHoles.autoPosition}
                   onChange={(e) => updateMountingHoles({ spacing: parseFloat(e.target.value) || 0 })}
                   onFocus={() => setHovered({ scope: 'holes', field: 'spacing' })}
                   onBlur={clearHover}
-                  className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+                  className={`w-28 rounded border px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40 ${mountingHoles.autoPosition ? 'opacity-50 bg-background/20 border-input/30 cursor-not-allowed text-muted-foreground font-semibold' : 'border-input/60 bg-background/50'}`}
                 />
                 <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
               </div>
             </label>
-            {matchesVise && (
+            {mountingHoles.autoPosition && (
+              <span className="text-[9px] text-primary/70 font-tech pl-0.5">
+                ✓ Auto-matched to vise bolt pattern ({visePitch} mm)
+              </span>
+            )}
+            {!mountingHoles.autoPosition && matchesVise && (
               <span className="text-[10px] text-green-600 dark:text-green-400 font-tech pl-0.5">
                 ✓ Matches vise bolt pattern ({visePitch} mm)
               </span>
             )}
-            {showVisePitch && (
+            {!mountingHoles.autoPosition && showVisePitch && (
               <div className="flex items-center justify-between pl-0.5">
                 <span className="text-[10px] text-amber-500 font-tech">
                   Vise pattern: {visePitch} mm — bolts won't align
@@ -315,10 +332,11 @@ export function JawBlankStepContent() {
               <input
                 type="number" min={5} max={100} step={1}
                 value={mountingHoles.holesHeight}
+                disabled={mountingHoles.autoPosition}
                 onChange={(e) => updateMountingHoles({ holesHeight: parseFloat(e.target.value) || 0 })}
                 onFocus={() => setHovered({ scope: 'holes', field: 'holesHeight' })}
                 onBlur={clearHover}
-                className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+                className={`w-28 rounded border px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40 ${mountingHoles.autoPosition ? 'opacity-50 bg-background/20 border-input/30 cursor-not-allowed text-muted-foreground font-semibold' : 'border-input/60 bg-background/50'}`}
               />
               <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
             </div>

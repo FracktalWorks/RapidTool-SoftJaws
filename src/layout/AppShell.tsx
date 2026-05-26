@@ -220,6 +220,7 @@ export function AppShell() {
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(true);
 
   const { generated: holesGenerated } = useSoftJawsStore((s) => s.mountingHoles);
+  const jawBlank = useSoftJawsStore((s) => s.jawBlank);
   const { generate: generateHoles, error: drillError } = useMountingHoles();
 
   // Auto-drill mounting holes when parameters change.
@@ -231,7 +232,7 @@ export function AppShell() {
   // now fixed to throw on failure, but the auto-drill is fire-and-forget so
   // we surface the rejection here.
   useEffect(() => {
-    if (!holesGenerated) {
+    if (!holesGenerated && !jawBlank.isDragging) {
       generateHoles().catch((err) => {
         // Don't swallow — print the CSG failure so the user (and any open
         // devtools session) can see exactly why drilling failed.
@@ -239,7 +240,7 @@ export function AppShell() {
         console.error('[AppShell] Auto-drill failed:', err);
       });
     }
-  }, [holesGenerated, generateHoles]);
+  }, [holesGenerated, generateHoles, jawBlank.isDragging]);
 
   // Bubble the auto-drill error to the console for visibility. (Hook keeps
   // it in state; the auto-drill effect above has no UI to render it.)

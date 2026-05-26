@@ -57,6 +57,7 @@ export interface JawBlankConfig {
   /** X extent — thickness sticking out from the carriage toward the workpiece */
   thickness: number;
   material: string;
+  isDragging?: boolean;
 }
 
 export interface JawProfileConfig {
@@ -81,6 +82,7 @@ export interface MountingHolesConfig {
   count: number;
   /** True once the hole CSG has populated JAW_HOLED_CACHE_KEY_{LEFT,RIGHT}. */
   generated: boolean;
+  autoPosition?: boolean;
 }
 
 export interface ExportConfig {
