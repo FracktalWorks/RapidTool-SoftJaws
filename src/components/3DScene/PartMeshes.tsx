@@ -115,14 +115,14 @@ function PartMesh({
   // DESIGN snapX: Always uses the design-time jawOverlap. This is the source of truth
   // for the store and CSG subtraction.
   const designSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile.jawOverlap);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile.jawOverlap, false);
   }, [viseConfig, jawBlank.left.thickness, jawProfile.jawOverlap, part]);
 
   // RENDER snapX: Uses the effective (possibly shifted) overlap. This is what
   // the user sees in the 3D viewport.
   const renderSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, renderOverlap);
-  }, [viseConfig, jawBlank.left.thickness, renderOverlap, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, renderOverlap, jawProfile.generated);
+  }, [viseConfig, jawBlank.left.thickness, renderOverlap, jawProfile.generated, part]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {

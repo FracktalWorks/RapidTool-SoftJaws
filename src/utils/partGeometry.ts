@@ -100,10 +100,12 @@ export function partSnapX(
   leftThickness: number,
   activePart: ProcessedPart | null,
   overlap: number,
+  generated?: boolean,
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return 0;
-  const leftFaceX = -fixedInnerX + leftThickness;
+  const leftT = generated ? leftThickness : 30.0;
+  const leftFaceX = -fixedInnerX + leftT;
   const worldWidth = computeWorldSpanX(activePart);
   return leftFaceX - overlap + worldWidth / 2;
 }
