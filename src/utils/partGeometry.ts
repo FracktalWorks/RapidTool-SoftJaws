@@ -61,11 +61,16 @@ export function rightBracketInnerX(
   generated?: boolean,
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
-  if (!activePart || !generated) return fixedInnerX;
+  if (!activePart) return fixedInnerX;
   const worldWidth    = computeWorldSpanX(activePart);
-  const leftFaceX     = -fixedInnerX + jawBlank.left.thickness;
+  
+  // Use actual thicknesses if generated (closed/clamped), or reference thickness (30.0) if design-time (open)
+  const leftT  = generated ? jawBlank.left.thickness  : 30.0;
+  const rightT = generated ? jawBlank.right.thickness : 30.0;
+  
+  const leftFaceX     = -fixedInnerX + leftT;
   const partRightEdge = leftFaceX - overlap + worldWidth;
-  return Math.min(fixedInnerX, partRightEdge - overlap + jawBlank.right.thickness);
+  return Math.min(fixedInnerX, partRightEdge - overlap + rightT);
 }
 
 /**
