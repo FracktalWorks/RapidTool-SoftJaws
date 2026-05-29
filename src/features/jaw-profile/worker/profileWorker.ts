@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 import polygonClipping from 'polygon-clipping';
@@ -143,15 +143,11 @@ function polyToShapes(poly: [number, number][][][]): THREE.Shape[] {
     shape.moveTo(outer[0][0], outer[0][1]);
     for (let i = 1; i < outer.length - 1; i++) shape.lineTo(outer[i][0], outer[i][1]);
     shape.closePath();
-    for (let h = 1; h < polygon.length; h++) {
-      const hole = polygon[h];
-      if (hole.length < 3) continue;
-      const path = new THREE.Path();
-      path.moveTo(hole[0][0], hole[0][1]);
-      for (let i = 1; i < hole.length - 1; i++) path.lineTo(hole[i][0], hole[i][1]);
-      path.closePath();
-      shape.holes.push(path);
-    }
+    
+    // For CNC soft jaws, we want the pocket to grip the outer boundary.
+    // We intentionally ignore any internal holes (polygon[1..N]) to avoid
+    // leaving "islands" of unmachined material in the center of hollow parts.
+    
     shapes.push(shape);
   }
   return shapes;
