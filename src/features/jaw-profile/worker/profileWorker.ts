@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Brush, Evaluator, SUBTRACTION, INTERSECTION, ADDITION } from 'three-bvh-csg';
 import polygonClipping from 'polygon-clipping';
-import { extractSilhouetteContour, suppressDeprecatedMaxLeafTrisWarning } from '@rapidtool/cad-core';
+import { extractSilhouetteContour } from '../../../../packages/cad-core/src/sweep/sweepProcessor';
+import { suppressDeprecatedMaxLeafTrisWarning } from '../../../../packages/cad-core/src/workers/suppressBvhWarnings';
 
 suppressDeprecatedMaxLeafTrisWarning();
 
@@ -101,9 +102,7 @@ function ensureUVs(geo: THREE.BufferGeometry): void {
 function inflateGeometry(geometry: THREE.BufferGeometry, offset: number): THREE.BufferGeometry {
   if (!offset) return geometry;
   let geo = geometry.clone();
-  if (!geo.getIndex()) {
-    geo = mergeVertices(geo, 1e-5);
-  }
+  geo = mergeVertices(geo, 1e-5);
   geo.computeVertexNormals();
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
@@ -139,6 +138,45 @@ function polyHolesToShapes(poly: [number, number][][][]): THREE.Shape[] {
   return shapes;
 }
 
+/**
+ * Cap ring point count so ExtrudeGeometry's earcut stays fast.
+ */
+const MAX_RING_POINTS = 300;
+
+function limitRing(ring: [number, number][]): [number, number][] {
+  if (ring.length <= MAX_RING_POINTS) return ring;
+  const step = ring.length / MAX_RING_POINTS;
+  const out: [number, number][] = [];
+  for (let i = 0; i < MAX_RING_POINTS; i++) {
+    out.push(ring[Math.floor(i * step)]);
+  }
+  return out;
+}
+
+function simplifyPoly(poly: [number, number][][][]): [number, number][][][] {
+  return poly
+    .map(polygon => polygon.map(limitRing).filter(r => r.length >= 3))
+    .filter(polygon => polygon.length > 0);
+}
+
+/**
+ * Convert a MultiPolygon into THREE.Shape objects.
+ * We ignore internal holes so the pocket grips the outer boundary cleanly.
+ */
+function polyToShapes(poly: [number, number][][][]): THREE.Shape[] {
+  const shapes: THREE.Shape[] = [];
+  for (const polygon of poly) {
+    const outer = polygon[0];
+    if (!outer || outer.length < 3) continue;
+    const shape = new THREE.Shape();
+    shape.moveTo(outer[0][0], outer[0][1]);
+    for (let i = 1; i < outer.length - 1; i++) shape.lineTo(outer[i][0], outer[i][1]);
+    shape.closePath();
+    shapes.push(shape);
+  }
+  return shapes;
+}
+
 self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
   const data = e.data;
 
@@ -165,106 +203,220 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
     const sweepNeg = data.removalDir[0] < 0;
     const jawFaceX = sweepNeg ? bb.maxX : bb.minX;
 
-    // ── 3. Weld and inflate 3D part geometry ──
-    const partGeo = new THREE.BufferGeometry();
-    partGeo.setAttribute('position', new THREE.BufferAttribute(worldVerts, 3));
-    if (data.partIndices) {
-      partGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.partIndices), 1));
-    }
-    partGeo.computeVertexNormals();
+    let finalResultGeo: THREE.BufferGeometry | null = null;
+    let fallbackToPrismatic = false;
 
-    let cleanPartGeo = partGeo;
-    if (!partGeo.index) {
-      cleanPartGeo = mergeVertices(partGeo, 1e-5);
+    // ── Try 3D Conforming CSG Subtraction ──
+    try {
+      const partGeo = new THREE.BufferGeometry();
+      partGeo.setAttribute('position', new THREE.BufferAttribute(worldVerts, 3));
+      if (data.partIndices) {
+        partGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.partIndices), 1));
+      }
+      partGeo.computeVertexNormals();
+
+      const cleanPartGeo = mergeVertices(partGeo, 1e-5);
       cleanPartGeo.computeVertexNormals();
-    }
-    ensureUVs(cleanPartGeo);
+      ensureUVs(cleanPartGeo);
 
-    // Inflate the 3D part by the clearance offset
-    const inflatedPartGeo = inflateGeometry(cleanPartGeo, data.offset);
+      // Inflate the 3D part by the clearance offset
+      const inflatedPartGeo = inflateGeometry(cleanPartGeo, data.offset);
 
-    // ── 4. Build depth clipping slab and intersect it with the part ──
-    const slabXSize = data.depth + FRONT_MARGIN;
-    const slabXCenter = sweepNeg ? jawFaceX - slabXSize / 2 : jawFaceX + slabXSize / 2;
+      // Build depth clipping slab and intersect it with the part
+      const slabXSize = data.depth + FRONT_MARGIN;
+      const slabXCenter = sweepNeg ? jawFaceX - slabXSize / 2 : jawFaceX + slabXSize / 2;
 
-    const slabYSize = (bb.maxY - bb.minY) * 3;
-    const slabZSize = (bb.maxZ - bb.minZ) * 3;
-    const slabYCenter = (bb.maxY + bb.minY) / 2;
-    const slabZCenter = (bb.maxZ + bb.minZ) / 2;
+      const slabYSize = (bb.maxY - bb.minY) * 3;
+      const slabZSize = (bb.maxZ - bb.minZ) * 3;
+      const slabYCenter = (bb.maxY + bb.minY) / 2;
+      const slabZCenter = (bb.maxZ + bb.minZ) / 2;
 
-    const slabGeo = new THREE.BoxGeometry(slabXSize, slabYSize, slabZSize);
-    slabGeo.translate(slabXCenter, slabYCenter, slabZCenter);
-    ensureUVs(slabGeo);
+      const slabGeo = new THREE.BoxGeometry(slabXSize, slabYSize, slabZSize);
+      slabGeo.translate(slabXCenter, slabYCenter, slabZCenter);
+      ensureUVs(slabGeo);
 
-    const partBrush = new Brush(inflatedPartGeo);
-    const slabBrush = new Brush(slabGeo);
-    partBrush.prepareGeometry();
-    slabBrush.prepareGeometry();
+      const partBrush = new Brush(inflatedPartGeo);
+      const slabBrush = new Brush(slabGeo);
+      partBrush.prepareGeometry();
+      slabBrush.prepareGeometry();
 
-    const evaluator = new Evaluator();
-    const clippedPartBrush = evaluator.evaluate(partBrush, slabBrush, INTERSECTION);
+      const evaluator = new Evaluator();
+      const clippedPartBrush = evaluator.evaluate(partBrush, slabBrush, INTERSECTION);
 
-    // ── 5. Extract silhouette contour for holes and slot extensions ──
-    const contourResult = await extractSilhouetteContour(worldVerts, {
-      direction:     { x: data.removalDir[0], y: data.removalDir[1], z: data.removalDir[2] },
-      contourOffset: data.offset,
-      layerHeight:   0.5,
-    });
+      // Extract silhouette contour for holes and slot extensions
+      const contourResult = await extractSilhouetteContour(worldVerts, {
+        direction:     { x: data.removalDir[0], y: data.removalDir[1], z: data.removalDir[2] },
+        contourOffset: data.offset,
+        layerHeight:   0.5,
+      });
 
-    if (!contourResult) throw new Error('Silhouette extraction failed.');
+      if (!contourResult) throw new Error('Silhouette extraction failed.');
 
-    let py_max_current = -Infinity;
-    let py_min_current = Infinity;
-    let px_min = Infinity, px_max = -Infinity;
+      let py_max_current = -Infinity;
+      let py_min_current = Infinity;
+      let px_min = Infinity, px_max = -Infinity;
 
-    for (const polygon of contourResult.poly) {
-      for (const ring of polygon) {
-        for (const [px, py] of ring) {
-          if (py > py_max_current) py_max_current = py;
-          if (py < py_min_current) py_min_current = py;
-          if (px < px_min) px_min = px;
-          if (px > px_max) px_max = px;
+      for (const polygon of contourResult.poly) {
+        for (const ring of polygon) {
+          for (const [px, py] of ring) {
+            if (py > py_max_current) py_max_current = py;
+            if (py < py_min_current) py_min_current = py;
+            if (px < px_min) px_min = px;
+            if (px > px_max) px_max = px;
+          }
         }
       }
+
+      const extensionShapes: THREE.Shape[] = [];
+
+      // Add hole shapes (solidifying any inner hollow cores)
+      const holeShapes = polyHolesToShapes(contourResult.poly);
+      extensionShapes.push(...holeShapes);
+
+      // Add top loading slot extension
+      const py_top_target = -bb.maxY;
+      const EXTEND_EPSILON = 0.5;
+      if (py_top_target < py_min_current - EXTEND_EPSILON) {
+        const topShape = new THREE.Shape();
+        topShape.moveTo(px_min - 0.01, py_top_target);
+        topShape.lineTo(px_max + 0.01, py_top_target);
+        topShape.lineTo(px_max + 0.01, py_min_current + 0.5);
+        topShape.lineTo(px_min - 0.01, py_min_current + 0.5);
+        topShape.closePath();
+        extensionShapes.push(topShape);
+      }
+
+      // Add bottom loading slot extension
+      const py_target = -bb.minY;
+      if (py_target > py_max_current + EXTEND_EPSILON) {
+        const bottomShape = new THREE.Shape();
+        bottomShape.moveTo(px_min - 0.01, py_max_current - 0.5);
+        bottomShape.lineTo(px_max + 0.01, py_max_current - 0.5);
+        bottomShape.lineTo(px_max + 0.01, py_target);
+        bottomShape.lineTo(px_min - 0.01, py_target);
+        bottomShape.closePath();
+        extensionShapes.push(bottomShape);
+      }
+
+      // Combine 3D conforming part and slot extensions
+      let cutterBrush = clippedPartBrush;
+
+      if (extensionShapes.length > 0) {
+        const extrudeGeo = new THREE.ExtrudeGeometry(extensionShapes, {
+          depth: slabXSize,
+          bevelEnabled: false,
+        });
+
+        const frontX = sweepNeg ? jawFaceX + FRONT_MARGIN : jawFaceX - FRONT_MARGIN;
+        const m = sweepNeg
+          ? new THREE.Matrix4().set(
+               0,  0, -1, frontX,
+               0, -1,  0, 0,
+              -1,  0,  0, 0,
+               0,  0,  0, 1,
+            )
+          : new THREE.Matrix4().set(
+               0,  0,  1, frontX,
+               0, -1,  0, 0,
+               1,  0,  0, 0,
+               0,  0,  0, 1,
+            );
+
+        extrudeGeo.applyMatrix4(m);
+        extrudeGeo.computeVertexNormals();
+        ensureUVs(extrudeGeo);
+
+        const extensionBrush = new Brush(extrudeGeo);
+        extensionBrush.prepareGeometry();
+        clippedPartBrush.prepareGeometry();
+
+        cutterBrush = evaluator.evaluate(clippedPartBrush, extensionBrush, ADDITION);
+      }
+
+      // Subtract composite cutter from jaw blank
+      ensureUVs(blankGeo);
+      cutterBrush.prepareGeometry();
+      const blankBrush = new Brush(blankGeo);
+      blankBrush.prepareGeometry();
+
+      const finalResult = evaluator.evaluate(blankBrush, cutterBrush, SUBTRACTION);
+      finalResultGeo = mergeVertices(finalResult.geometry, 1e-4);
+      finalResultGeo.computeVertexNormals();
+
+      // Clean up temporary geometries
+      partGeo.dispose();
+      slabGeo.dispose();
+      blankGeo.dispose();
+      if (finalResultGeo !== finalResult.geometry) {
+        finalResult.geometry.dispose();
+      }
+    } catch (csgError) {
+      console.warn('[ProfileWorker] 3D CSG failed (likely non-manifold mesh), falling back to prismatic silhouette cut:', csgError);
+      fallbackToPrismatic = true;
     }
 
-    const extensionShapes: THREE.Shape[] = [];
+    // ── Fallback: Robust Prismatic Silhouette Cut ──
+    if (fallbackToPrismatic || !finalResultGeo) {
+      const contourResult = await extractSilhouetteContour(worldVerts, {
+        direction:     { x: data.removalDir[0], y: data.removalDir[1], z: data.removalDir[2] },
+        contourOffset: data.offset,
+        layerHeight:   0.5,
+      });
 
-    // Add hole shapes (solidifying any inner hollow cores)
-    const holeShapes = polyHolesToShapes(contourResult.poly);
-    extensionShapes.push(...holeShapes);
+      if (!contourResult) throw new Error('Silhouette extraction failed.');
 
-    // Add top loading slot extension (extending the cut all the way to the top of the jaw)
-    const py_top_target = -bb.maxY;
-    const EXTEND_EPSILON = 0.5;
-    if (py_top_target < py_min_current - EXTEND_EPSILON) {
-      const topShape = new THREE.Shape();
-      topShape.moveTo(px_min - 0.01, py_top_target);
-      topShape.lineTo(px_max + 0.01, py_top_target);
-      topShape.lineTo(px_max + 0.01, py_min_current + 0.5);
-      topShape.lineTo(px_min - 0.01, py_min_current + 0.5);
-      topShape.closePath();
-      extensionShapes.push(topShape);
-    }
+      let py_max_current = -Infinity;
+      let py_min_current = Infinity;
+      let px_min = Infinity, px_max = -Infinity;
 
-    // Add bottom loading slot extension (extending the cut all the way to the rail)
-    const py_target = -bb.minY;
-    if (py_target > py_max_current + EXTEND_EPSILON) {
-      const bottomShape = new THREE.Shape();
-      bottomShape.moveTo(px_min - 0.01, py_max_current - 0.5);
-      bottomShape.lineTo(px_max + 0.01, py_max_current - 0.5);
-      bottomShape.lineTo(px_max + 0.01, py_target);
-      bottomShape.lineTo(px_min - 0.01, py_target);
-      bottomShape.closePath();
-      extensionShapes.push(bottomShape);
-    }
+      for (const polygon of contourResult.poly) {
+        for (const ring of polygon) {
+          for (const [px, py] of ring) {
+            if (py > py_max_current) py_max_current = py;
+            if (py < py_min_current) py_min_current = py;
+            if (px < px_min) px_min = px;
+            if (px > px_max) px_max = px;
+          }
+        }
+      }
 
-    // ── 6. Combine 3D conforming part and slot extensions ──
-    let cutterBrush = clippedPartBrush;
+      const extensionShapes: THREE.Shape[] = [];
 
-    if (extensionShapes.length > 0) {
+      // Convert full silhouette contour to solid shapes (ignoring holes to prevent islands)
+      const simplifiedPoly = simplifyPoly(contourResult.poly);
+      const shapes = polyToShapes(simplifiedPoly);
+      extensionShapes.push(...shapes);
+
+      // Add top loading slot extension
+      const py_top_target = -bb.maxY;
+      const EXTEND_EPSILON = 0.5;
+      if (py_top_target < py_min_current - EXTEND_EPSILON) {
+        const topShape = new THREE.Shape();
+        topShape.moveTo(px_min - 0.01, py_top_target);
+        topShape.lineTo(px_max + 0.01, py_top_target);
+        topShape.lineTo(px_max + 0.01, py_min_current + 0.5);
+        topShape.lineTo(px_min - 0.01, py_min_current + 0.5);
+        topShape.closePath();
+        extensionShapes.push(topShape);
+      }
+
+      // Add bottom loading slot extension
+      const py_target = -bb.minY;
+      if (py_target > py_max_current + EXTEND_EPSILON) {
+        const bottomShape = new THREE.Shape();
+        bottomShape.moveTo(px_min - 0.01, py_max_current - 0.5);
+        bottomShape.lineTo(px_max + 0.01, py_max_current - 0.5);
+        bottomShape.lineTo(px_max + 0.01, py_target);
+        bottomShape.lineTo(px_min - 0.01, py_target);
+        bottomShape.closePath();
+        extensionShapes.push(bottomShape);
+      }
+
+      if (extensionShapes.length === 0) throw new Error('No shapes produced from silhouette polygon.');
+
+      const extrudeDepth = data.depth + FRONT_MARGIN;
       const extrudeGeo = new THREE.ExtrudeGeometry(extensionShapes, {
-        depth: slabXSize,
+        depth: extrudeDepth,
         bevelEnabled: false,
       });
 
@@ -287,43 +439,38 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
       extrudeGeo.computeVertexNormals();
       ensureUVs(extrudeGeo);
 
-      const extensionBrush = new Brush(extrudeGeo);
-      extensionBrush.prepareGeometry();
-      clippedPartBrush.prepareGeometry();
+      ensureUVs(blankGeo);
+      const blankBrush  = new Brush(blankGeo);
+      const cutterBrush = new Brush(extrudeGeo);
+      blankBrush.prepareGeometry();
+      cutterBrush.prepareGeometry();
 
-      cutterBrush = evaluator.evaluate(clippedPartBrush, extensionBrush, ADDITION);
+      const evaluator = new Evaluator();
+      const finalResult = evaluator.evaluate(blankBrush, cutterBrush, SUBTRACTION);
+      finalResultGeo = mergeVertices(finalResult.geometry, 1e-4);
+      finalResultGeo.computeVertexNormals();
+
+      blankGeo.dispose();
+      extrudeGeo.dispose();
+      if (finalResultGeo !== finalResult.geometry) {
+        finalResult.geometry.dispose();
+      }
     }
 
-    // ── 7. Subtract composite cutter from jaw blank ──
-    ensureUVs(blankGeo);
-    cutterBrush.prepareGeometry();
-    const blankBrush = new Brush(blankGeo);
-    blankBrush.prepareGeometry();
-
-    const finalResult = evaluator.evaluate(blankBrush, cutterBrush, SUBTRACTION);
-    const resGeo = mergeVertices(finalResult.geometry, 1e-4);
-    resGeo.computeVertexNormals();
-
-    // Clean up temporary geometries
-    partGeo.dispose();
-    slabGeo.dispose();
-    blankGeo.dispose();
-    if (resGeo !== finalResult.geometry) {
-      finalResult.geometry.dispose();
-    }
+    if (!finalResultGeo) throw new Error('CSG failed to produce geometry.');
 
     // ── 8. Extract output arrays ──
-    if (!resGeo.index) {
-      const n = resGeo.getAttribute('position').count;
+    if (!finalResultGeo.index) {
+      const n = finalResultGeo.getAttribute('position').count;
       const idx = new Uint32Array(n);
       for (let i = 0; i < n; i++) idx[i] = i;
-      resGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+      finalResultGeo.setIndex(new THREE.BufferAttribute(idx, 1));
     }
 
-    const posArray  = new Float32Array(resGeo.getAttribute('position').array);
-    const normArray = new Float32Array(resGeo.getAttribute('normal').array);
-    const idxArray  = new Uint32Array(resGeo.index!.array);
-    resGeo.dispose();
+    const posArray  = new Float32Array(finalResultGeo.getAttribute('position').array);
+    const normArray = new Float32Array(finalResultGeo.getAttribute('normal').array);
+    const idxArray  = new Uint32Array(finalResultGeo.index!.array);
+    finalResultGeo.dispose();
 
     (self as unknown as Worker).postMessage({
       id: data.id, success: true,
