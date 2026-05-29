@@ -190,9 +190,9 @@ export function JawBlankMesh() {
     const newCenterY = dragStartCenterY.current + (newHeight - dragStartHeight.current) / 2;
 
     const activeSign = activeGizmoSide!;
-    // Since the outer face of the jaw is fixed, increasing the thickness by 2x shifts
-    // the center (and the gizmo) by 1x. Multiply by 2 so the gizmo tracks the pointer precisely.
-    const deltaT = 2 * (-activeSign * tempPos.x);
+    // The gizmo is placed on the inner face of the jaw.
+    // Dragging it directly translates to a 1:1 change in thickness.
+    const deltaT = -activeSign * tempPos.x;
     const newThickness = Math.max(5, Math.min(150, dragStartThickness.current + deltaT));
     const scaleX = newThickness / dragStartThickness.current;
     const actualDeltaT = newThickness - dragStartThickness.current;
@@ -383,7 +383,7 @@ export function JawBlankMesh() {
 
             {/* Height/Length Adjustment Gizmo (X & Y Translation) */}
             {isGizmoActive && (
-              <group position={[x, centerY + height / 2, 0]}>
+              <group position={[x + sign * (thickness / 2), centerY + height / 2, 0]}>
                 <PivotControls
                   ref={pivotRef}
                   activeAxes={[true, true, false]}
