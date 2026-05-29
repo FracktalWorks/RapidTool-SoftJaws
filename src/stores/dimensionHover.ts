@@ -14,7 +14,7 @@ import { create } from 'zustand';
 export type HoverScope   = 'vise' | 'jaw' | 'profile' | 'holes';
 export type ViseField    = 'jawStroke' | 'jawWidth' | 'jawHeight';
 export type JawField     = 'thickness' | 'face' | 'height';
-export type ProfileField = 'depth';
+export type ProfileField = 'depth' | 'clearance';
 export type HolesField   = 'boltSize' | 'screwheadHeight' | 'screwheadDiameter' | 'spacing' | 'holesHeight';
 
 export interface HoveredDimension {

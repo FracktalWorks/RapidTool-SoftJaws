@@ -61,9 +61,10 @@ const INITIAL_STATE: SoftJawsState = {
     isDragging: false,
   },
   jawProfile: {
-    clearance: 0.2,
-    depth: 5,
-    jawOverlap: 5.0,
+    clearance: 0.1,
+    depth: 5.0,
+    leftDepth: 5.0,
+    rightDepth: 5.0,
     generated: false,
   },
   gripFeatures: {
@@ -225,7 +226,9 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
           // hook to set `generated: true` after a successful run.
           const csgInputChanged =
             (config.clearance !== undefined && config.clearance !== state.jawProfile.clearance) ||
-            (config.depth     !== undefined && config.depth     !== state.jawProfile.depth);
+            (config.depth     !== undefined && config.depth     !== state.jawProfile.depth) ||
+            (config.leftDepth !== undefined && config.leftDepth !== state.jawProfile.leftDepth) ||
+            (config.rightDepth !== undefined && config.rightDepth !== state.jawProfile.rightDepth);
           Object.assign(state.jawProfile, config);
           if (csgInputChanged) state.jawProfile.generated = false;
         }),

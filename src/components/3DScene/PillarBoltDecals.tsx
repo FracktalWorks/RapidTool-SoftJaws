@@ -31,7 +31,7 @@ import {
   bracketInnerX,
   VISE_GEOMETRY,
 } from '@/features/vise-config/data/presets';
-import { rightBracketInnerX, effectiveOverlap } from '@/utils/partGeometry';
+import { rightBracketInnerX } from '@/utils/partGeometry';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
 
 const HOLE_DARK_COLOR = '#0a0c10';
@@ -106,12 +106,9 @@ export function PillarBoltDecals() {
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
 
-  // RENDER-TIME overlap. Tracks the moving carriage post-profile.
-  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
-
   const decals = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap, jawProfile.generated,
+      viseConfig, jawBlank, mountingHoles, activePart, jawProfile,
     );
 
     // Left bracket is fixed at the max-stroke position.
@@ -120,13 +117,13 @@ export function PillarBoltDecals() {
 
     // Right bracket TRACKS the part — same formula ViseModel uses to render
     // the moving pillar, so the decals land on the actual pillar back face.
-    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap, jawProfile.generated);
+    const rightInnerXAbs = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile);
     const rightOuterX    =  rightInnerXAbs + VISE_GEOMETRY.BR_PILLAR_LEN;
 
     const throughR = mountingHoles.boltSize / 2 + HOLE_CLEARANCE;
 
     return { throughR, leftOuterX, rightOuterX, left, right };
-  }, [viseConfig, jawBlank, mountingHoles, activePart, renderOverlap]);
+  }, [viseConfig, jawBlank, mountingHoles, activePart, jawProfile]);
 
   const { throughR, leftOuterX, rightOuterX, left, right } = decals;
 

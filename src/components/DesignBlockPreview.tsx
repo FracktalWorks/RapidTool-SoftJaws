@@ -112,6 +112,16 @@ function resolve(
         partialLength: jawProfile.depth,
       };
     }
+    if (hovered.field === 'clearance') {
+      return {
+        boxDims,
+        axis: 'x', // highlight color will default to X (red/cyan) or we override
+        arrowR3F: 'x',
+        value: jawProfile.clearance,
+        label: 'Clearance',
+        material: JAW_MATERIAL,
+      };
+    }
   }
 
   if (hovered.scope === 'holes') {
@@ -528,6 +538,161 @@ function HolesPreviewDiagram({ field, mountingHoles }: HolesPreviewDiagramProps)
   );
 }
 
+interface ProfilePreviewDiagramProps {
+  field: string;
+  jawProfile: ReturnType<typeof useSoftJawsStore.getState>['jawProfile'];
+}
+
+function ProfilePreviewDiagram({ field, jawProfile }: ProfilePreviewDiagramProps) {
+  const highlightColor = '#0ea5e9'; // sky-500
+  const isClearance = field === 'clearance';
+  const isDepth = field === 'depth';
+
+  return (
+    <svg viewBox="0 0 300 240" className="w-full h-full text-card-foreground select-none font-tech">
+      <defs>
+        {/* Shading for the workpiece */}
+        <linearGradient id="partShading" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#22c55e" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#22c55e" stopOpacity="0.2" />
+        </linearGradient>
+        {/* Shading for the pocket cut zone */}
+        <linearGradient id="pocketShading" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.1" />
+          <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.0" />
+        </linearGradient>
+        {/* Define arrow markers */}
+        <marker
+          id="arrow-start"
+          viewBox="0 0 10 10"
+          refX="0"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M 10 0 L 0 5 L 10 10 z" fill={highlightColor} />
+        </marker>
+        <marker
+          id="arrow-end"
+          viewBox="0 0 10 10"
+          refX="10"
+          refY="5"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill={highlightColor} />
+        </marker>
+      </defs>
+
+      {/* ─── JAW BLANK (CROSS SECTION) ─── */}
+      <path
+        d="M 30 30 
+           L 180 30 
+           L 180 80 
+           L 110 80 
+           L 110 160 
+           L 180 160 
+           L 180 210 
+           L 30 210 
+           Z"
+        fill="#f8fafc"
+        stroke="#334155"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* ─── WORKPIECE / PART (CROSS SECTION) ─── */}
+      <rect
+        x="113"
+        y="85"
+        width="137"
+        height="70"
+        rx="2"
+        fill="url(#partShading)"
+        stroke="#16a34a"
+        strokeWidth="1.5"
+      />
+
+      {/* ─── LABELS & MEASUREMENTS ─── */}
+
+      {/* 1. POCKET DEPTH (depth) */}
+      <g opacity={isDepth ? 1.0 : 0.4}>
+        <line x1="180" y1="30" x2="180" y2="23" stroke={isDepth ? highlightColor : "#94a3b8"} strokeWidth="1" strokeDasharray="2,2" />
+        <line x1="110" y1="75" x2="110" y2="23" stroke={isDepth ? highlightColor : "#94a3b8"} strokeWidth="1" strokeDasharray="2,2" />
+        <line
+          x1="110"
+          y1="25"
+          x2="180"
+          y2="25"
+          stroke={isDepth ? highlightColor : "#475569"}
+          strokeWidth="1.5"
+          markerStart={isDepth ? "url(#arrow-start)" : undefined}
+          markerEnd={isDepth ? "url(#arrow-end)" : undefined}
+        />
+        <text
+          x="145"
+          y="18"
+          fill={isDepth ? highlightColor : "#475569"}
+          fontSize="9"
+          textAnchor="middle"
+          fontWeight="bold"
+        >
+          Pocket Depth (D): {jawProfile.depth.toFixed(1)} mm
+        </text>
+      </g>
+
+      {/* 2. CLEARANCE (clearance) */}
+      <g opacity={isClearance ? 1.0 : 0.4}>
+        <line x1="130" y1="80" x2="155" y2="80" stroke={isClearance ? highlightColor : "#94a3b8"} strokeWidth="1" />
+        <line x1="130" y1="85" x2="155" y2="85" stroke={isClearance ? highlightColor : "#94a3b8"} strokeWidth="1" />
+        <line x1="150" y1="65" x2="150" y2="80" stroke={isClearance ? highlightColor : "#475569"} strokeWidth="1" markerEnd={isClearance ? "url(#arrow-end)" : undefined} />
+        <line x1="150" y1="100" x2="150" y2="85" stroke={isClearance ? highlightColor : "#475569"} strokeWidth="1" markerEnd={isClearance ? "url(#arrow-end)" : undefined} />
+        <text
+          x="156"
+          y="74"
+          fill={isClearance ? highlightColor : "#475569"}
+          fontSize="9"
+          textAnchor="start"
+          fontWeight="bold"
+        >
+          Clearance (C): {jawProfile.clearance.toFixed(2)} mm
+        </text>
+      </g>
+
+      {/* 3. SAFETY MARGIN (bottom gap) */}
+      <g opacity={isDepth ? 1.0 : 0.3}>
+        <path
+          d="M 111.5 120 L 111.5 220 L 95 220"
+          fill="none"
+          stroke="#ef4444"
+          strokeWidth="1"
+          strokeDasharray="2,2"
+        />
+        <text
+          x="90"
+          y="223"
+          fill="#ef4444"
+          fontSize="9"
+          textAnchor="end"
+          fontWeight="medium"
+        >
+          Safety Clamp Margin (0.05 mm)
+        </text>
+        <circle cx="111.5" cy="120" r="2" fill="#ef4444" />
+      </g>
+      
+      <text x="210" y="180" fill="#16a34a" fontSize="9" textAnchor="middle" fontWeight="bold">
+        Workpiece
+      </text>
+      <text x="70" y="125" fill="#475569" fontSize="9" textAnchor="middle" fontWeight="bold">
+        Jaw Blank
+      </text>
+    </svg>
+  );
+}
+
 // ─── Card wrapper ────────────────────────────────────────────────────────────
 
 export function DesignBlockPreview() {
@@ -546,6 +711,7 @@ export function DesignBlockPreview() {
 
   const { boxDims, axis, arrowR3F, value, label, material, partialLength } = resolved;
   const isHolesScope = hovered?.scope === 'holes';
+  const isProfileScope = hovered?.scope === 'profile';
   const isViseScope = hovered?.scope === 'vise';
 
   // Calculate maxDim with margin for the extra vise components if in vise scope
@@ -562,6 +728,8 @@ export function DesignBlockPreview() {
         <div className="h-[280px] bg-gradient-to-br from-muted/40 to-background flex items-center justify-center p-2">
           {isHolesScope ? (
             <HolesPreviewDiagram field={hovered.field} mountingHoles={mountingHoles} />
+          ) : isProfileScope ? (
+            <ProfilePreviewDiagram field={hovered.field} jawProfile={jawProfile} />
           ) : (
             <Canvas gl={{ antialias: true, alpha: true }}>
               <FramedCamera maxDim={maxDim} />

@@ -73,8 +73,9 @@ export interface UpdateJawBlankConfig {
 
 export interface JawProfileConfig {
   clearance: number;
-  depth: number;
-  jawOverlap: number;
+  depth: number; // default depth
+  leftDepth: number;
+  rightDepth: number;
   generated: boolean;
 }
 

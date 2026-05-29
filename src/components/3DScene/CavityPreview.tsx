@@ -89,26 +89,35 @@ export function CavityPreview() {
 
     // Same source-of-truth math as PartMeshes / JawBlankMesh / useJawProfile.
     const leftFaceX    = -innerX + jawBlank.left.thickness;          // left jaw inner face
-    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap, jawProfile.generated);
+    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile);
     const rightFaceX   = rightCenter - jawBlank.right.thickness / 2;  // right jaw inner face
 
     const partSpanX    = computeWorldSpanX(activePart);
     const partHeight   = activePart.boundingBox.max[1] - activePart.boundingBox.min[1];
 
-    // The pocket is `pocketDepth` mm deep, but a real workpiece is usually
-    // MUCH wider than that (e.g. depth=10 mm, partSpanX=45 mm). If we placed
-    // the ghost so its facing edge touched the jaw face, it would poke
-    // through the back of the blank — exactly the misleading preview shown
-    // in the top-view screenshot.
-    //
-    // Instead: position each ghost CENTERED in its cavity (X = jawFaceX ∓ depth/2)
-    // and SCALE the X axis so the workpiece compresses to fit exactly the
-    // pocket's X extent. YZ is left untouched, so the silhouette/profile that
-    // will be cut is preserved. The user sees "this is the shape that lands
-    // in this exact volume", which is what the cavity actually is.
-    const xScale       = pocketDepth > 0 ? pocketDepth / partSpanX : 1;
-    const leftGhostCx  = leftFaceX  - pocketDepth / 2;
-    const rightGhostCx = rightFaceX + pocketDepth / 2;
+    // Default snapping point of the part at design-time
+    const leftFaceXDefault = -innerX + 30.0;
+    const snapX        = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
+
+    // World coordinates of the part:
+    const partCenterWorldX = snapX + activePart.transform.position.x;
+    const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
+    const partRightEdgeX = partCenterWorldX + partSpanX / 2;
+
+    const minBackWall = 5.0;
+    const maxLeftDepth = Math.max(1.0, jawBlank.left.thickness - minBackWall);
+    const maxRightDepth = Math.max(1.0, jawBlank.right.thickness - minBackWall);
+
+    const leftOverlap = parseFloat(Math.max(1.0, Math.min(maxLeftDepth, leftFaceX - partLeftEdgeX)).toFixed(2));
+    const rightOverlap = parseFloat(Math.max(1.0, Math.min(maxRightDepth, partRightEdgeX - rightFaceX)).toFixed(2));
+
+    // Position each ghost at its actual physical design-time overlap location,
+    // keeping the workpiece at full 1:1 scale (no X distortion) so it does
+    // not look like it is "dipped into a mold".
+    const leftXScale   = 1;
+    const rightXScale  = 1;
+    const leftGhostCx  = leftFaceX - leftOverlap + partSpanX / 2;
+    const rightGhostCx = rightFaceX + rightOverlap - partSpanX / 2;
 
     // Y/Z: same as PartMeshes — bottom of the part sits on the rail.
     const ghostY = baseH + partHeight / 2 + activePart.transform.position.y;
@@ -117,10 +126,10 @@ export function CavityPreview() {
     return {
       leftGhostCx, rightGhostCx,
       ghostY, ghostZ,
-      xScale,
+      leftXScale, rightXScale,
       rotation: activePart.transform.rotation,
     };
-  }, [activePart, jawBlank, viseConfig, jawProfile, pocketDepth]);
+  }, [activePart, jawBlank, viseConfig, jawProfile]);
 
   if (activeStep !== 'jaw-profile') return null;
   if (profileGenerated)             return null;
@@ -139,7 +148,7 @@ export function CavityPreview() {
       <mesh
         geometry={partGeo}
         position={[layout.leftGhostCx, layout.ghostY, layout.ghostZ]}
-        scale={[layout.xScale, 1, 1]}
+        scale={[layout.leftXScale, 1, 1]}
         rotation={rot}
       >
         <meshStandardMaterial
@@ -157,7 +166,7 @@ export function CavityPreview() {
       <mesh
         geometry={partGeo}
         position={[layout.rightGhostCx, layout.ghostY, layout.ghostZ]}
-        scale={[layout.xScale, 1, 1]}
+        scale={[layout.rightXScale, 1, 1]}
         rotation={rot}
       >
         <meshStandardMaterial

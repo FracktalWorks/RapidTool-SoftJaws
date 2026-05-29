@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
-import { rightBracketInnerX, effectiveOverlap } from '@/utils/partGeometry';
+import { rightBracketInnerX } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
@@ -137,18 +137,10 @@ export function ViseModel() {
   });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
-  // RENDER-TIME overlap. Once the profile is generated, the right
-  // bracket carriage closes on the workpiece — see effectiveOverlap.
-  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
-
-  // Left L-bracket is ALWAYS fixed (the static jaw of a milling vise).
-  // Right L-bracket carriage tracks the rotated world-space right edge of the
-  // part — uses shared rightBracketInnerX so PillarBoltDecals lands its bolt
-  // exits on the same moved face (no more floating decals).
   const leftInnerX = bracketInnerX(viseConfig);
   const rightInnerX = useMemo(
-    () => rightBracketInnerX(viseConfig, jawBlank, activePart, renderOverlap),
-    [viseConfig, jawBlank, activePart, renderOverlap],
+    () => rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile),
+    [viseConfig, jawBlank, activePart, jawProfile],
   );
 
   // (pillarHoles + pillarBoltDia + pillarHoleR previously fed PillarTappedHole

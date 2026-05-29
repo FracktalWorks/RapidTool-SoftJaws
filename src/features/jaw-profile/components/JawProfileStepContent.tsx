@@ -4,7 +4,9 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useJawProfile } from '../hooks/useJawProfile';
 import { getStepGate } from '@/workflow';
 import { AXIS_TEXT_CLASS } from '@/utils/axisColors';
-import { computeWorldSpanX } from '@/utils/partGeometry';
+import { computeWorldSpanX, rightBracketInnerX } from '@/utils/partGeometry';
+import { useViseStore } from '@/stores/viseStore';
+import { bracketInnerX } from '@/features/vise-config/data/presets';
 import { useDimensionHoverStore } from '@/stores/dimensionHover';
 
 /** Minimum back-wall thickness behind the pocket — keeps the jaw structurally sound. */
@@ -19,7 +21,7 @@ export function JawProfileStepContent() {
     const id = s.activePart;
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
-  const updateJawProfile  = useSoftJawsStore((s) => s.updateJawProfile);
+  const viseConfig        = useViseStore((s) => s.viseConfig);
   const setHovered        = useDimensionHoverStore((s) => s.setHovered);
   const clearHover        = useDimensionHoverStore((s) => s.clear);
   const { status, error, faceCount, generate } = useJawProfile();
@@ -40,19 +42,32 @@ export function JawProfileStepContent() {
   // Pocket depth must leave at least BACK_WALL_MIN of stock behind it,
   // otherwise the CSG cuts through the jaw and the part has no back wall.
   const depthMax = Math.max(1, minThickness - BACK_WALL_MIN);
-  const handleDepthChange = (raw: number) => {
-    const clamped = Math.max(1, Math.min(depthMax, raw));
-    updateJawProfile({ depth: clamped });
-  };
-  const handleClearanceChange = (raw: number) => {
-    const clamped = Math.max(0, Math.min(2, raw));
-    updateJawProfile({ clearance: clamped });
-  };
+
+  // Compute overlaps dynamically
+  const { leftOverlap, rightOverlap } = useMemo(() => {
+    if (!activePart || partSpanX === null) return { leftOverlap: 0, rightOverlap: 0 };
+    const innerX = bracketInnerX(viseConfig);
+    const leftFaceXActual = -innerX + jawBlank.left.thickness;
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile);
+    const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
+    
+    const leftFaceXDefault = -innerX + 30.0;
+    const snapX = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
+    const partCenterWorldX = snapX + activePart.transform.position.x;
+    
+    const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
+    const partRightEdgeX = partCenterWorldX + partSpanX / 2;
+    
+    return {
+      leftOverlap: Math.max(0, leftFaceXActual - partLeftEdgeX),
+      rightOverlap: Math.max(0, partRightEdgeX - rightFaceXActual)
+    };
+  }, [activePart, partSpanX, viseConfig, jawBlank, jawProfile]);
 
   return (
     <div className="flex flex-col gap-4 p-3">
       <p className="text-xs text-muted-foreground font-tech tracking-wide">
-        Configure cavity parameters, then generate the jaw profile via CSG subtraction.
+        Verify layout overlaps, then generate the jaw profile via CSG subtraction.
       </p>
 
       {/* ── Derived from imported part — Trinckle-style read-only panel ── */}
@@ -80,64 +95,32 @@ export function JawProfileStepContent() {
         )}
       </div>
 
-      {/* ── Parameters ────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3">
-        <label className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">
-            Clearance
-            <span className="ml-1.5 text-[9px] text-muted-foreground/60 font-tech font-normal">
-              0–2
-            </span>
-          </span>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min={0}
-              max={2}
-              step={0.05}
-              value={jawProfile.clearance}
-              disabled={isRunning}
-              onChange={(e) => handleClearanceChange(parseFloat(e.target.value) || 0)}
-              className="w-24 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
-            />
-            <span className="text-muted-foreground">mm</span>
+      {/* ── Visual Overlap Display ─────────────────────────────────── */}
+      {activePart && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            Visual Overlaps (Pocket Depths)
+          </p>
+          <div className="grid grid-cols-2 gap-4 py-1">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-tech uppercase tracking-widest text-muted-foreground/60">Left Overlap (X)</span>
+              <span className={`text-sm font-semibold font-tech ${AXIS_TEXT_CLASS.x}`}>
+                {leftOverlap.toFixed(2)} mm
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-tech uppercase tracking-widest text-muted-foreground/60">Right Overlap (X)</span>
+              <span className={`text-sm font-semibold font-tech ${AXIS_TEXT_CLASS.x}`}>
+                {rightOverlap.toFixed(2)} mm
+              </span>
+            </div>
           </div>
-        </label>
-        <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5 -mt-1.5">
-          Pocket is offset outward on every face by this amount — tolerance for fit.
-        </p>
-
-        <label
-          className="flex items-center justify-between text-xs"
-          onMouseEnter={() => setHovered({ scope: 'profile', field: 'depth' })}
-          onMouseLeave={clearHover}
-        >
-          <span className={`font-medium ${AXIS_TEXT_CLASS.x}`}>
-            Pocket depth (X)
-            <span className="ml-1.5 text-[9px] text-muted-foreground/60 font-tech font-normal">
-              1–{depthMax.toFixed(1)}
-            </span>
-          </span>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min={1}
-              max={depthMax}
-              step={0.5}
-              value={jawProfile.depth}
-              disabled={isRunning}
-              onChange={(e) => handleDepthChange(parseFloat(e.target.value) || 0)}
-              onFocus={() => setHovered({ scope: 'profile', field: 'depth' })}
-              onBlur={clearHover}
-              className="w-24 rounded border border-input bg-background px-2 py-1 text-right text-xs disabled:opacity-50"
-            />
-            <span className="text-muted-foreground">mm</span>
-          </div>
-        </label>
-        <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5 -mt-1.5">
-          Depth cut into the jaw along the clamping axis. Leaves {(minThickness - jawProfile.depth).toFixed(1)} mm back-wall stock.
-        </p>
-      </div>
+          <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5 border-t border-border/20 pt-2">
+            ℹ Pocket depths are derived directly from the workpiece's visual overlap on the jaw blanks. 
+            Adjust jaw thickness (Step 3) or vise stroke (Step 1) to alter the overlaps.
+          </p>
+        </div>
+      )}
 
       {/* ── Status feedback ───────────────────────────────────────── */}
       {error && (

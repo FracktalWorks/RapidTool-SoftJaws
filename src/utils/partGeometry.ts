@@ -57,20 +57,27 @@ export function rightBracketInnerX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
-  overlap:    number,
-  generated?: boolean,
+  profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return fixedInnerX;
   const worldWidth    = computeWorldSpanX(activePart);
   
-  // Use actual thicknesses if generated (closed/clamped), or reference thickness (30.0) if design-time (open)
-  const leftT  = generated ? jawBlank.left.thickness  : 30.0;
-  const rightT = generated ? jawBlank.right.thickness : 30.0;
-  
-  const leftFaceX     = -fixedInnerX + leftT;
-  const partRightEdge = leftFaceX - overlap + worldWidth;
-  return Math.min(fixedInnerX, partRightEdge - overlap + rightT);
+  if (profile.generated) {
+    // Closed clamping positioning using separate left and right depths
+    const leftOverlap = effectiveOverlap(profile, 'left');
+    const rightOverlap = effectiveOverlap(profile, 'right');
+    const leftFaceX = -fixedInnerX + jawBlank.left.thickness;
+    const partLeftX = leftFaceX - leftOverlap;
+    const partRightX = partLeftX + worldWidth;
+    const rightFaceX = partRightX - rightOverlap;
+    return Math.min(fixedInnerX, rightFaceX + jawBlank.right.thickness);
+  } else {
+    // Design-time positioning using reference thickness 30.0 and target depth
+    const leftFaceX     = -fixedInnerX + 30.0;
+    const partRightEdge = leftFaceX - profile.depth + worldWidth;
+    return Math.min(fixedInnerX, partRightEdge - profile.depth + 30.0);
+  }
 }
 
 /**
@@ -84,10 +91,9 @@ export function rightJawCenterX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
-  overlap:    number,
-  generated?: boolean,
+  profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
 ): number {
-  return rightBracketInnerX(viseConfig, jawBlank, activePart, overlap, generated)
+  return rightBracketInnerX(viseConfig, jawBlank, activePart, profile)
        - jawBlank.right.thickness / 2;
 }
 
@@ -99,15 +105,20 @@ export function partSnapX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
   leftThickness: number,
   activePart: ProcessedPart | null,
-  overlap: number,
-  generated?: boolean,
+  profile: { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return 0;
-  const leftT = generated ? leftThickness : 30.0;
-  const leftFaceX = -fixedInnerX + leftT;
   const worldWidth = computeWorldSpanX(activePart);
-  return leftFaceX - overlap + worldWidth / 2;
+  
+  if (profile.generated) {
+    const leftOverlap = effectiveOverlap(profile, 'left');
+    const leftFaceX = -fixedInnerX + leftThickness;
+    return leftFaceX - leftOverlap + worldWidth / 2;
+  } else {
+    const leftFaceX = -fixedInnerX + 30.0;
+    return leftFaceX - profile.depth + worldWidth / 2;
+  }
 }
 
 /**
@@ -126,11 +137,12 @@ export function partSnapX(
 const POST_CLAMP_SAFETY_MM = 0.05;
 
 export function effectiveOverlap(
-  designOverlap: number,
-  profile: { generated: boolean; depth: number },
+  profile: { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  side: 'left' | 'right',
 ): number {
-  if (profile.generated && profile.depth > POST_CLAMP_SAFETY_MM) {
-    return profile.depth - POST_CLAMP_SAFETY_MM;
+  const depth = side === 'left' ? profile.leftDepth : profile.rightDepth;
+  if (profile.generated && depth > POST_CLAMP_SAFETY_MM) {
+    return depth - POST_CLAMP_SAFETY_MM;
   }
-  return designOverlap;
+  return profile.generated ? depth : profile.depth;
 }

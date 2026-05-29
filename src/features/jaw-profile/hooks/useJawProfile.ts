@@ -31,7 +31,7 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, rightJawCenterX } from '@/utils/partGeometry';
+import { computeWorldSpanX, rightJawCenterX, rightBracketInnerX } from '@/utils/partGeometry';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -196,10 +196,30 @@ export function useJawProfile(): UseJawProfileReturn {
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
     const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
-    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile.jawOverlap, false);
-    const leftFaceX    = -innerX + jawBlank.left.thickness;
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile);
+    
+    const leftFaceXActual = -innerX + jawBlank.left.thickness;
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, jawProfile);
+    const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
+    
     const partSpanX    = computeWorldSpanX(part);
-    const snapX        = leftFaceX - jawProfile.jawOverlap + partSpanX / 2;
+    
+    // Default snapping point of the part at design-time
+    const leftFaceXDefault = -innerX + 30.0;
+    const snapX        = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
+    
+    // Word coordinates of the part:
+    const partCenterWorldX = snapX + part.transform.position.x;
+    const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
+    const partRightEdgeX = partCenterWorldX + partSpanX / 2;
+
+    // Calculate actual physical overlaps at design time
+    const minBackWall = 5.0;
+    const maxLeftDepth = Math.max(1.0, jawBlank.left.thickness - minBackWall);
+    const maxRightDepth = Math.max(1.0, jawBlank.right.thickness - minBackWall);
+    
+    const leftOverlap = parseFloat(Math.max(1.0, Math.min(maxLeftDepth, leftFaceXActual - partLeftEdgeX)).toFixed(2));
+    const rightOverlap = parseFloat(Math.max(1.0, Math.min(maxRightDepth, partRightEdgeX - rightFaceXActual)).toFixed(2));
 
     // ── Build left & right blanks ────────────────────────────────────────────
     const getBaseGeo = (cacheKey: string, xCenter: number, side: 'left' | 'right') => {
@@ -244,7 +264,7 @@ export function useJawProfile(): UseJawProfileReturn {
     // the part at the same world Y the scene shows.
     const partTransformForCsg = {
       position: {
-        x: snapX,
+        x: partCenterWorldX,
         y: baseH + part.transform.position.y,
         z: part.transform.position.z,
       },
@@ -254,6 +274,7 @@ export function useJawProfile(): UseJawProfileReturn {
     const makePayload = (
       geo: THREE.BufferGeometry,
       removalDir: [number, number, number],
+      sideDepth: number,
     ): import('../worker/profileWorker').ProfileWorkerInput => ({
       id:              partId,
       blankPositions:  geo.getAttribute('position').array as Float32Array,
@@ -265,15 +286,15 @@ export function useJawProfile(): UseJawProfileReturn {
       partTransform:   partTransformForCsg,
       partBoundingBox: part.boundingBox,
       removalDir,
-      depth:           jawProfile.depth,
+      depth:           sideDepth,
       offset:          jawProfile.clearance,
     });
 
     try {
       // Run both sides in parallel — each worker is independent.
       const [leftRes, rightRes] = await Promise.all([
-        runCsgWorker(makePayload(leftGeo,  [-1, 0, 0])),
-        runCsgWorker(makePayload(rightGeo, [+1, 0, 0])),
+        runCsgWorker(makePayload(leftGeo,  [-1, 0, 0], leftOverlap)),
+        runCsgWorker(makePayload(rightGeo, [+1, 0, 0], rightOverlap)),
       ]);
 
       leftGeo.dispose();
@@ -326,7 +347,11 @@ export function useJawProfile(): UseJawProfileReturn {
         faceCount: rightFaceCount,
       });
 
-      updateJawProfile({ generated: true });
+      updateJawProfile({
+        leftDepth: leftOverlap,
+        rightDepth: rightOverlap,
+        generated: true
+      });
       setFaceCount(leftFaceCount + rightFaceCount);
       setStatus('success');
     } catch (err) {

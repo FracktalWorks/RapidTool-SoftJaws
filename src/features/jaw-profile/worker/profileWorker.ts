@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
-import polygonClipping from 'polygon-clipping';
-import { extractSilhouetteContour, suppressDeprecatedMaxLeafTrisWarning } from '@rapidtool/cad-core';
+import { Brush, Evaluator, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
+import { suppressDeprecatedMaxLeafTrisWarning } from '@rapidtool/cad-core';
 
 suppressDeprecatedMaxLeafTrisWarning();
 
@@ -75,6 +74,7 @@ function getWorldSpaceVerts(
 
   const worldGeo = indices ? geo.toNonIndexed() : geo.clone();
   worldGeo.applyMatrix4(mesh.matrixWorld);
+  geo.dispose();
   return new Float32Array(worldGeo.getAttribute('position').array);
 }
 
@@ -98,70 +98,11 @@ function ensureUVs(geo: THREE.BufferGeometry): void {
   }
 }
 
-/**
- * Cap ring point count so ExtrudeGeometry's earcut stays fast.
- *
- * polygon-clipping union adds O(N) intersection vertices per step; after
- * ~50 accumulate iterations a ring can grow from 500 → 10000 points.
- * earcut on a 10k-point polygon is O(n²) ≈ 10–30 s per side — that's what
- * causes the CSG worker timeout on complex meshes (threads, dense profiles).
- *
- * Uniform downsampling to MAX_RING_POINTS ≤ 300 reduces earcut to ~50 ms.
- * For circular/thread silhouettes at typical bolt radii (r ≥ 8 mm) the max
- * chord shortcut error is r(1 − cos(π/300)) ≈ 0.003 mm — well below any
- * machining tolerance.
- */
-const MAX_RING_POINTS = 300;
-
-function limitRing(ring: [number, number][]): [number, number][] {
-  if (ring.length <= MAX_RING_POINTS) return ring;
-  const step = ring.length / MAX_RING_POINTS;
-  const out: [number, number][] = [];
-  for (let i = 0; i < MAX_RING_POINTS; i++) {
-    out.push(ring[Math.floor(i * step)]);
-  }
-  return out;
-}
-
-function simplifyPoly(poly: [number, number][][][]): [number, number][][][] {
-  return poly
-    .map(polygon => polygon.map(limitRing).filter(r => r.length >= 3))
-    .filter(polygon => polygon.length > 0);
-}
-
-/**
- * Convert a MultiPolygon (polygon-clipping format) into THREE.Shape objects
- * suitable for ExtrudeGeometry. Each polygon becomes one shape; holes are
- * attached via shape.holes.
- */
-function polyToShapes(poly: [number, number][][][]): THREE.Shape[] {
-  const shapes: THREE.Shape[] = [];
-  for (const polygon of poly) {
-    const outer = polygon[0];
-    if (!outer || outer.length < 3) continue;
-    const shape = new THREE.Shape();
-    shape.moveTo(outer[0][0], outer[0][1]);
-    for (let i = 1; i < outer.length - 1; i++) shape.lineTo(outer[i][0], outer[i][1]);
-    shape.closePath();
-    for (let h = 1; h < polygon.length; h++) {
-      const hole = polygon[h];
-      if (hole.length < 3) continue;
-      const path = new THREE.Path();
-      path.moveTo(hole[0][0], hole[0][1]);
-      for (let i = 1; i < hole.length - 1; i++) path.lineTo(hole[i][0], hole[i][1]);
-      path.closePath();
-      shape.holes.push(path);
-    }
-    shapes.push(shape);
-  }
-  return shapes;
-}
-
 self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
   const data = e.data;
 
   try {
-    // ── 1. World-space part triangle soup ─────────────────────────────────────
+    // ── 1. World-space part geometry ──────────────────────────────────────────
     const worldVerts = getWorldSpaceVerts(
       data.partPositions,
       data.partIndices,
@@ -169,7 +110,41 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
       data.partTransform,
     );
 
-    // ── 2. Jaw blank geometry ─────────────────────────────────────────────────
+    // ── 2. Create the part geometry ───────────────────────────────────────────
+    let partGeo = new THREE.BufferGeometry();
+    partGeo.setAttribute('position', new THREE.BufferAttribute(worldVerts, 3));
+    if (data.partIndices) {
+      partGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.partIndices), 1));
+    } else {
+      const n = worldVerts.length / 3;
+      const indices = new Uint32Array(n);
+      for (let i = 0; i < n; i++) indices[i] = i;
+      partGeo.setIndex(new THREE.BufferAttribute(indices, 1));
+    }
+
+    // ── 3. Weld vertices to ensure manifold and average normals ───────────────
+    partGeo = mergeVertices(partGeo, 1e-5);
+    partGeo.computeVertexNormals();
+
+    // ── 4. Inflate by clearance offset ────────────────────────────────────────
+    if (data.offset > 0) {
+      const pos = partGeo.getAttribute('position') as THREE.BufferAttribute;
+      const nor = partGeo.getAttribute('normal') as THREE.BufferAttribute;
+      const arr = pos.array as Float32Array;
+      const nArr = nor.array as Float32Array;
+      for (let i = 0; i < pos.count; i++) {
+        const ix = i * 3;
+        arr[ix]     += nArr[ix]     * data.offset;
+        arr[ix + 1] += nArr[ix + 1] * data.offset;
+        arr[ix + 2] += nArr[ix + 2] * data.offset;
+      }
+      pos.needsUpdate = true;
+      partGeo.computeVertexNormals();
+    }
+    partGeo.computeBoundingBox();
+    partGeo.computeBoundingSphere();
+
+    // ── 5. Jaw blank geometry ─────────────────────────────────────────────────
     const blankGeo = new THREE.BufferGeometry();
     blankGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(data.blankPositions), 3));
     blankGeo.setAttribute('normal',   new THREE.BufferAttribute(new Float32Array(data.blankNormals), 3));
@@ -181,148 +156,51 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
     const sweepNeg = data.removalDir[0] < 0;
     const jawFaceX = sweepNeg ? bb.maxX : bb.minX;
 
-    // ── 3. Extract full-silhouette contour (slice + accumulate, no lofting) ───
-    //
-    // extractSilhouetteContour runs the same slice/accumulate pipeline as
-    // createSweptMesh but stops before the loft step, returning the last
-    // merged-slice polygon — the maximum union of all YZ cross-sections.
-    // Using this as a prism cutter (rather than the staircase loft) removes
-    // the horizontal shelf artifacts on curved cavity walls.
-    const contourResult = await extractSilhouetteContour(worldVerts, {
-      direction:     { x: data.removalDir[0], y: data.removalDir[1], z: data.removalDir[2] },
-      contourOffset: data.offset,
-      layerHeight:   0.5,
-    });
+    // ── 6. Create depth clipping slab ─────────────────────────────────────────
+    // Limit subtraction depth to exactly `data.depth` inside the jaw.
+    const FRONT_MARGIN = 2.0; // mm past jaw face for clean entry and clearance
+    const slabXSize = data.depth + FRONT_MARGIN;
+    const slabXCenter = sweepNeg
+      ? jawFaceX + (FRONT_MARGIN - data.depth) / 2
+      : jawFaceX + (data.depth - FRONT_MARGIN) / 2;
 
-    if (!contourResult) throw new Error('Silhouette extraction produced no contour.');
+    const slabYSize = (bb.maxY - bb.minY) * 3;
+    const slabZSize = (bb.maxZ - bb.minZ) * 3;
+    const slabYCenter = (bb.maxY + bb.minY) / 2;
+    const slabZCenter = (bb.maxZ + bb.minZ) / 2;
 
-    // ── 3.5. DIAGNOSTIC — dump the raw silhouette polygon so we can see
-    //         whether the slicer is actually capturing the workpiece curves
-    //         or producing a near-rectangle.
-    //
-    // For each ring: emit point count, bbox, and a coarse ascii thumbnail.
-    {
-      const dir = data.removalDir;
-      console.groupCollapsed(`[silhouette] direction=[${dir[0]},${dir[1]},${dir[2]}] — ${contourResult.poly.length} polygon(s)`);
-      contourResult.poly.forEach((polygon, pi) => {
-        polygon.forEach((ring, ri) => {
-          let px0 = Infinity, px1 = -Infinity, py0 = Infinity, py1 = -Infinity;
-          for (const [px, py] of ring) {
-            if (px < px0) px0 = px; if (px > px1) px1 = px;
-            if (py < py0) py0 = py; if (py > py1) py1 = py;
-          }
-          const w = px1 - px0, h = py1 - py0;
-          console.log(
-            `poly[${pi}].ring[${ri}]: ${ring.length} pts | ` +
-            `px=[${px0.toFixed(2)}..${px1.toFixed(2)}] w=${w.toFixed(2)} | ` +
-            `py=[${py0.toFixed(2)}..${py1.toFixed(2)}] h=${h.toFixed(2)} | ` +
-            `aspect=${(w/h).toFixed(2)}`
-          );
-          // 24×12 ascii grid: '#' for inside polygon (point-in-poly test)
-          if (ri === 0) {
-            const W = 32, H = 16;
-            const rows: string[] = [];
-            for (let row = 0; row < H; row++) {
-              const py = py0 + (h * (row + 0.5)) / H;
-              let line = '';
-              for (let col = 0; col < W; col++) {
-                const px = px0 + (w * (col + 0.5)) / W;
-                let inside = false;
-                for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-                  const [xi, yi] = ring[i], [xj, yj] = ring[j];
-                  if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
-                }
-                line += inside ? '#' : '·';
-              }
-              rows.push(line);
-            }
-            console.log(rows.join('\n'));
-          }
-        });
-      });
-      console.groupEnd();
-    }
+    const slabGeo = new THREE.BoxGeometry(slabXSize, slabYSize, slabZSize);
+    slabGeo.translate(slabXCenter, slabYCenter, slabZCenter);
 
-    // ── 3a. Extend the silhouette downward to the rail (drop-in loading slot) ─
-    //
-    // Soft jaws are typically machined as an open-bottom pocket so the
-    // workpiece can be dropped in from above.
-    const railY      = bb.minY;        // blank's lowest Y in world == rail
-    const py_target  = -railY;
-
-    let py_max_current = -Infinity;
-    let px_min = Infinity, px_max = -Infinity;
-    for (const polygon of contourResult.poly) {
-      for (const ring of polygon) {
-        for (const [px, py] of ring) {
-          if (py > py_max_current) py_max_current = py;
-          if (px < px_min) px_min = px;
-          if (px > px_max) px_max = px;
-        }
-      }
-    }
-
-    let workingPoly: [number, number][][][] = contourResult.poly;
-    const EXTEND_EPSILON = 0.5; // mm — don't extend if workpiece is already at the rail
-    if (py_target > py_max_current + EXTEND_EPSILON) {
-      const extensionRect: [number, number][][][] = [[[
-        [px_min - 0.01, py_max_current - 0.5],
-        [px_max + 0.01, py_max_current - 0.5],
-        [px_max + 0.01, py_target],
-        [px_min - 0.01, py_target],
-      ]]];
-      workingPoly = polygonClipping.union(
-        contourResult.poly as polygonClipping.MultiPolygon,
-        extensionRect as polygonClipping.MultiPolygon,
-      ) as [number, number][][][];
-    }
-
-    // ── 4. Build prismatic cutter via ExtrudeGeometry ─────────────────────────
-    const FRONT_MARGIN = 2; // mm past jaw inner face
-    const extrudeDepth = data.depth + FRONT_MARGIN;
-
-    const simplifiedPoly = simplifyPoly(workingPoly);
-    const shapes = polyToShapes(simplifiedPoly);
-    if (shapes.length === 0) throw new Error('No shapes produced from silhouette polygon.');
-
-    const extrudeGeo = new THREE.ExtrudeGeometry(shapes, {
-      depth: extrudeDepth,
-      bevelEnabled: false,
-    });
-
-    const frontX = sweepNeg ? jawFaceX + FRONT_MARGIN : jawFaceX - FRONT_MARGIN;
-    const m = sweepNeg
-      ? new THREE.Matrix4().set(
-           0,  0, -1, frontX,
-           0, -1,  0, 0,
-          -1,  0,  0, 0,
-           0,  0,  0, 1,
-        )
-      : new THREE.Matrix4().set(
-           0,  0,  1, frontX,
-           0, -1,  0, 0,
-           1,  0,  0, 0,
-           0,  0,  0, 1,
-        );
-
-    extrudeGeo.applyMatrix4(m);
-    extrudeGeo.computeVertexNormals();
-
-    // ── 5. Subtract cutter from blank ─────────────────────────────────────────
+    // ── 7. Run CSG Intersection to get the clipped cutter ────────────────────
     ensureUVs(blankGeo);
-    ensureUVs(extrudeGeo);
+    ensureUVs(partGeo);
+    ensureUVs(slabGeo);
 
     const evaluator = new Evaluator();
     const blankBrush  = new Brush(blankGeo);
-    const cutterBrush = new Brush(extrudeGeo);
+    const partBrush   = new Brush(partGeo);
+    const slabBrush   = new Brush(slabGeo);
+    
     blankBrush.prepareGeometry();
+    partBrush.prepareGeometry();
+    slabBrush.prepareGeometry();
+
+    const cutterBrush = evaluator.evaluate(partBrush, slabBrush, INTERSECTION);
     cutterBrush.prepareGeometry();
 
+    // ── 8. Subtract cutter from blank ─────────────────────────────────────────
     const finalResult = evaluator.evaluate(blankBrush, cutterBrush, SUBTRACTION);
     const resGeo = mergeVertices(finalResult.geometry, 1e-4);
     resGeo.computeVertexNormals();
 
-    // ── 6. Extract output arrays ──────────────────────────────────────────────
+    // ── 9. Clean up temporary geometries ──────────────────────────────────────
+    partGeo.dispose();
+    slabGeo.dispose();
+    blankGeo.dispose();
+    cutterBrush.geometry.dispose();
+
+    // ── 10. Extract output arrays ─────────────────────────────────────────────
     if (!resGeo.index) {
       const n = resGeo.getAttribute('position').count;
       const idx = new Uint32Array(n);
@@ -333,6 +211,7 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
     const posArray  = new Float32Array(resGeo.getAttribute('position').array);
     const normArray = new Float32Array(resGeo.getAttribute('normal').array);
     const idxArray  = new Uint32Array(resGeo.index!.array);
+    resGeo.dispose();
 
     (self as unknown as Worker).postMessage({
       id: data.id, success: true,

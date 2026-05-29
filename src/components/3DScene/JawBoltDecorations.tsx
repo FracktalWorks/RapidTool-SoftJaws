@@ -38,7 +38,7 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeMountingHolePositions } from '@/features/mounting-holes/data/positions';
-import { effectiveOverlap } from '@/utils/partGeometry';
+
 
 const HOLE_DARK_COLOR  = '#06080c';
 const HOLE_RING_COLOR  = '#2f343b';   // slightly darker than the bracket rim so the
@@ -108,16 +108,13 @@ export function JawBoltDecorations() {
     return id ? (s.parts.find((p) => p.id === id) ?? null) : null;
   });
 
-  // Decals track the moving carriage post-profile.
-  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
-
   const data = useMemo(() => {
     const { left, right } = computeMountingHolePositions(
-      viseConfig, jawBlank, mountingHoles, activePart, renderOverlap, jawProfile.generated,
+      viseConfig, jawBlank, mountingHoles, activePart, jawProfile,
     );
     const cboreR = mountingHoles.screwheadDiameter / 2;
     return { left, right, cboreR };
-  }, [viseConfig, jawBlank, mountingHoles, activePart, renderOverlap]);
+  }, [viseConfig, jawBlank, mountingHoles, activePart, jawProfile]);
 
   // Once real CSG holes exist (JAW_HOLED cache), the geometry itself shows the
   // counterbore — decorations would visually double up. Hide.

@@ -22,8 +22,8 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { rightJawCenterX, effectiveOverlap } from '@/utils/partGeometry';
-import { setOrbitControlsEnabled } from '@rapidtool/cad-core';
+import { rightJawCenterX } from '@/utils/partGeometry';
+import { setOrbitControlsEnabled, resetPivotMatrix } from '@rapidtool/cad-core';
 
 const MATERIAL_COLORS: Record<string, string> = {
   'aluminum-6061': '#3a4048',
@@ -53,6 +53,7 @@ export function JawBlankMesh() {
   });
 
   const [activeGizmoSide, setActiveGizmoSide] = useState<-1 | 1 | null>(null);
+  const pivotRef = useRef<THREE.Group>(null);
 
   const leftMeshRef = useRef<THREE.Mesh>(null);
   const rightMeshRef = useRef<THREE.Mesh>(null);
@@ -102,10 +103,8 @@ export function JawBlankMesh() {
 
   const baseY = useMemo(() => jawBaseH(viseConfig.jawHeight), [viseConfig.jawHeight]);
   const innerX = useMemo(() => bracketInnerX(viseConfig), [viseConfig]);
-  const overlap = useMemo(() => effectiveOverlap(jawProfile.jawOverlap, jawProfile), [jawProfile]);
-
   const leftXOff = useMemo(() => innerX - jawBlank.left.thickness / 2, [innerX, jawBlank.left.thickness]);
-  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, overlap, jawProfile.generated), [viseConfig, jawBlank, activePart, overlap, jawProfile.generated]);
+  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile), [viseConfig, jawBlank, activePart, jawProfile]);
 
   const leftCenterY = useMemo(() => baseY + jawBlank.left.height / 2, [baseY, jawBlank.left.height]);
   const rightCenterY = useMemo(() => baseY + jawBlank.right.height / 2, [baseY, jawBlank.right.height]);
@@ -115,6 +114,10 @@ export function JawBlankMesh() {
   const deactivateGizmo = useCallback(() => {
     setActiveGizmoSide(null);
     setOrbitControlsEnabled(true);
+
+    if (pivotRef.current) {
+      resetPivotMatrix(pivotRef.current);
+    }
 
     if (leftMeshRef.current) {
       leftMeshRef.current.scale.set(1, 1, 1);
@@ -187,7 +190,9 @@ export function JawBlankMesh() {
     const newCenterY = dragStartCenterY.current + (newHeight - dragStartHeight.current) / 2;
 
     const activeSign = activeGizmoSide!;
-    const deltaT = -activeSign * tempPos.x;
+    // Since the outer face of the jaw is fixed, increasing the thickness by 2x shifts
+    // the center (and the gizmo) by 1x. Multiply by 2 so the gizmo tracks the pointer precisely.
+    const deltaT = 2 * (-activeSign * tempPos.x);
     const newThickness = Math.max(5, Math.min(150, dragStartThickness.current + deltaT));
     const scaleX = newThickness / dragStartThickness.current;
     const actualDeltaT = newThickness - dragStartThickness.current;
@@ -241,6 +246,10 @@ export function JawBlankMesh() {
       finalThickness = dragStartThickness.current * activeMesh.scale.x;
     }
 
+    if (pivotRef.current) {
+      resetPivotMatrix(pivotRef.current);
+    }
+
     const resetMesh = (
       mesh: THREE.Mesh | null,
       labelGroup: THREE.Group | null,
@@ -269,16 +278,6 @@ export function JawBlankMesh() {
       thickness: parseFloat(finalThickness.toFixed(1)),
     };
 
-    // Keep the overlap centered on thickness changes by updating overlap
-    const thicknessDiff = value.thickness - dragStartThickness.current;
-    if (thicknessDiff !== 0) {
-      const currentOverlap = useSoftJawsStore.getState().jawProfile.jawOverlap;
-      // Growth of thickness inward increases overlap on the model by half the difference
-      updates.jawProfile = {
-        jawOverlap: parseFloat(Math.max(0, currentOverlap + thicknessDiff / 2).toFixed(2))
-      };
-    }
-
     if (linkJaws) {
       updates.left = value;
       updates.right = value;
@@ -289,7 +288,7 @@ export function JawBlankMesh() {
 
     useSoftJawsStore.getState().updateJawBlank(updates);
     setOrbitControlsEnabled(true);
-  }, [activeGizmoSide, leftCenterY, rightCenterY, leftXOff, rightXOff, jawBlank, overlap]);
+  }, [activeGizmoSide, leftCenterY, rightCenterY, leftXOff, rightXOff, jawBlank]);
 
   return (
     <group onPointerMissed={deactivateGizmo}>
@@ -386,6 +385,7 @@ export function JawBlankMesh() {
             {isGizmoActive && (
               <group position={[x, centerY + height / 2, 0]}>
                 <PivotControls
+                  ref={pivotRef}
                   activeAxes={[true, true, false]}
                   disableRotations={true}
                   disableScaling={true}

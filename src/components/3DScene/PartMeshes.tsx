@@ -63,10 +63,6 @@ function PartMesh({
   const jawBlank = useSoftJawsStore((s) => s.jawBlank);
   const viseConfig = useViseStore((s) => s.viseConfig);
 
-  // Once profile.generated, the workpiece slides into the left cavity by
-  // (depth − safety) mm. Before profile generation it's a no-op (returns
-  // jawOverlap unchanged).
-  const renderOverlap = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
   // While true, useLayoutEffect must NOT re-apply store values.
@@ -115,14 +111,14 @@ function PartMesh({
   // DESIGN snapX: Always uses the design-time jawOverlap. This is the source of truth
   // for the store and CSG subtraction.
   const designSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile.jawOverlap, false);
-  }, [viseConfig, jawBlank.left.thickness, jawProfile.jawOverlap, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, { ...jawProfile, generated: false });
+  }, [viseConfig, jawBlank.left.thickness, jawProfile, part]);
 
   // RENDER snapX: Uses the effective (possibly shifted) overlap. This is what
   // the user sees in the 3D viewport.
   const renderSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, renderOverlap, jawProfile.generated);
-  }, [viseConfig, jawBlank.left.thickness, renderOverlap, jawProfile.generated, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile);
+  }, [viseConfig, jawBlank.left.thickness, jawProfile, part]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {
@@ -171,7 +167,7 @@ function PartMesh({
     ({ position: worldPos, rotation: worldRot }: TransformData) => {
       updatePartTransform(part.id, {
         position: {
-          x: designSnapX, // X is mathematically locked to the fixed jaw, ignore gizmo drag
+          x: 0, // X is mathematically locked to the fixed jaw, ignore gizmo drag
           y: worldPos.y - baseY, // strip rail offset — store holds delta only
           z: worldPos.z,
         },
@@ -187,7 +183,7 @@ function PartMesh({
       // useLayoutEffect apply world-space values in local space, doubling
       // the offset. gizmoActive lifecycle is managed by handleSelectionChange.
     },
-    [part.id, updatePartTransform, baseY, designSnapX],
+    [part.id, updatePartTransform, baseY],
   );
 
   if (!geometry) return null;

@@ -62,12 +62,11 @@ export function computeMountingHolePositions(
   jawBlank:      JawBlankConfig,
   mountingHoles: Pick<MountingHolesConfig, 'count' | 'spacing' | 'boltSize' | 'holesHeight' | 'screwheadDiameter'>,
   activePart:    ProcessedPart | null,
-  overlap:       number,
-  generated?:    boolean,
+  profile:       { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
 ): PerSideHoles {
   const innerX       = bracketInnerX(viseConfig);
   // Right side tracks the part; left stays at the fixed max-stroke position.
-  const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, overlap, generated);
+  const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, profile);
   const xCenterLeft  = innerX - jawBlank.left.thickness / 2;
   const jawBaseY     = jawBaseH(viseConfig.jawHeight);
   const nominalY     = jawBaseY + mountingHoles.holesHeight;

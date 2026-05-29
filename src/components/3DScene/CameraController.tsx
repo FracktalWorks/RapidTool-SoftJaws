@@ -62,7 +62,7 @@ function computeSceneBox(
 
   const activePart = parts[parts.length - 1] ?? null; // most-recently imported
   const leftInnerX = bracketInnerX(viseConfig);
-  const rightInnerX = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap);
+  const rightInnerX = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile);
 
   // Left jaw box
   const leftFace = jawBlank.left.face;

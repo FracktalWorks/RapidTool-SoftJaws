@@ -30,7 +30,7 @@ import {
   JAW_PROFILE_CACHE_KEY_LEFT,
   JAW_PROFILE_CACHE_KEY_RIGHT,
 } from '@/stores/geometryCache';
-import { rightJawCenterX, effectiveOverlap } from '@/utils/partGeometry';
+import { rightJawCenterX } from '@/utils/partGeometry';
 
 function buildGeometry(cacheKey: string): THREE.BufferGeometry | null {
   const cached = geometryCache.get(cacheKey);
@@ -68,9 +68,9 @@ export function JawProfileMesh() {
   // For the LEFT mesh this delta is always zero (left bracket is fixed).
   const rightMeshOffsetX = useMemo(() => {
     if (!profileReady || !activePart) return 0;
-    const effective = effectiveOverlap(jawProfile.jawOverlap, jawProfile);
-    return rightJawCenterX(viseConfig, jawBlank, activePart, effective, true)
-         - rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile.jawOverlap, false);
+    const clampedCenter = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile);
+    const designCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false });
+    return clampedCenter - designCenter;
   }, [profileReady, activePart, viseConfig, jawBlank, jawProfile]);
 
   const geos = useMemo(() => {
