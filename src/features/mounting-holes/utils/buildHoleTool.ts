@@ -5,239 +5,128 @@
  * BufferGeometry that `cad-core/performHoleCSGInWorker` subtracts from the
  * blank in one pass. No globals, no store reads, no DOM, no React.
  *
- * Each mounting bolt is modelled as a counterbore + through-hole pair:
+ * EACH HOLE IS ONE CLOSED SOLID OF REVOLUTION (a lathe-revolved profile),
+ * not a merge of two overlapping cylinders. This is the canonical CAD way to
+ * model a counterbored hole and the only shape three-bvh-csg can subtract
+ * cleanly:
  *
- *   ┌──────────────────────────── jaw blank (thickness `t`) ─────────────┐
- *   │                                                                    │
- *   │  inner face (workpiece side)                  outer face (bracket) │
- *   │       │                                              │             │
- *   │       │←─── counterbore (depth `h`) ───→             │             │
- *   │       │   diameter = screwheadDiameter               │             │
- *   │       │                                              │             │
- *   │       └───── through-hole — bolt shank ──────────────┘             │
- *   │             diameter = boltSize + 2·HOLE_CLEARANCE                 │
- *   └────────────────────────────────────────────────────────────────────┘
+ *   profile (radius r, axial x)              revolved 360° → tophat solid
  *
- * Positions are in LOCAL coords (relative to the blank centre at origin).
- * The hook callers (`useMountingHoles`) translate the cached geometry to
- * world space at render time.
+ *      r                                      ┌───────────┐  ← inner face (+overshoot)
+ *      ▲          P4┌──────┐P5(axis)          │  counter  │
+ *  cbR ┤      P3 ●──┘      │                   │   bore    │ counterboreDepth
+ *      │         │ ledge   │                   ├───┬───┬───┤  ← step ledge
+ *      │         │         │                   │   │   │   │
+ *  thR ┤  P1 ●───┘P2       │                   │   │ d │   │  through-hole
+ *      │     │             │                   │   │   │   │
+ *    0 ┼──●──┴─────────────┴──► x              └───┴───┴───┘  ← outer face (+overshoot)
+ *       P0(axis)
  *
- * CSG-correctness notes:
- *   • Through-hole length = thickness + 2·THROUGH_OVERSHOOT, so the cylinder
- *     pokes 0.4 mm past BOTH faces.
- *   • Counterbore length  = screwheadHeight + THROUGH_OVERSHOOT, with the
- *     overshoot on the OUTER (inner-face) side only. Without this, the
- *     cutter's far face would be coplanar with the blank's inner face and
- *     three-bvh-csg's evaluator can't resolve coplanar coincidence — it
- *     leaves a thin membrane disc (the "plate" that made the counterbore
- *     look like a flat decoration instead of a real recess).
+ * Why a lathe profile, not two merged cylinders:
+ *   • Two coaxial cylinders (through + counterbore) concatenated with
+ *     mergeGeometries SELF-INTERSECT in the overlap region — the narrow
+ *     cylinder's wall lies inside the wide one. three-bvh-csg's classifier
+ *     can't decide inside/outside across that coincidence and emits a
+ *     degenerate result (the counterbore renders as a flat disc / plain
+ *     cylinder — exactly the reported symptom).
+ *   • A single revolved profile is a watertight, manifold, non-self-
+ *     intersecting solid with one clean 90° step. CSG resolves it exactly.
  *
- * Parametric model — what the caller controls vs what's fixed:
- *   parametric : boltSize, screwheadDiameter, screwheadHeight, thickness,
- *                positions, sign
- *   constants  : HOLE_CLEARANCE   (manufacturing radial slip fit for bolt)
- *                THROUGH_OVERSHOOT (CSG-epsilon — not a user-facing fit)
- *                CYL_SEGMENTS     (mesh tessellation, render quality)
+ * CSG-correctness — overshoot on BOTH faces:
+ *   The profile extends THROUGH_OVERSHOOT past the inner face (counterbore
+ *   top) AND past the outer face (through-hole bottom). Without it the cutter
+ *   end-caps would be coplanar with the blank faces, which three-bvh-csg
+ *   leaves as a thin membrane. The pocket depth INTO the blank is still
+ *   exactly counterboreDepth (the step sits counterboreDepth below the inner
+ *   face regardless of overshoot).
+ *
+ * Parametric model (1:1 with the UI):
+ *   holeDiameter        → through-hole / bolt-shank clearance Ø (cut exactly)
+ *   counterboreDiameter → SHCS head recess Ø
+ *   counterboreDepth    → recess depth into the inner face
+ *   thickness           → jaw stock X extent (hole goes fully through)
+ *
+ * Positions are in LOCAL coords (blank centred at origin). `useMountingHoles`
+ * translates the cached geometry to world space at render time.
  */
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { HolePosition } from '../data/positions';
 
-// ── Manufacturing constants ─────────────────────────────────────────────────
-/** Radial clearance per side around the bolt shank — typical slip fit. */
-const HOLE_CLEARANCE = 0.2;
-
-/** Counterbore diameter ÷ boltSize — exported so positions.ts can clamp
- *  Y using the SAME radius the CSG actually cuts (no drift). */
-export const COUNTERBORE_DIA_K = 1.8;
-
-// ── CSG / mesh constants ────────────────────────────────────────────────────
-/** Cutter overshoot past the blank face — eliminates coplanar artifacts. */
+/** Cutter overshoot past each blank face (mm) — eliminates coplanar artifacts. */
 const THROUGH_OVERSHOOT = 0.4;
-/** Radial segments per cylinder — smooth at typical zoom levels. */
-const CYL_SEGMENTS      = 48;
+/** Minimum material left between counterbore floor and the outer face (mm). */
+const MIN_WALL = 1.0;
+/** Radial segments per revolved hole — smooth at typical zoom. */
+const CYL_SEGMENTS = 64;
 
 /**
- * Produce a merged BufferGeometry of all bolt-hole tools for one side.
+ * Produce a merged BufferGeometry of all bolt-hole cutters for one side.
  *
- * @param positions          Hole centerlines in LOCAL frame (blank at origin).
- *                           Pass `x=0` per hole — the X axis (through-direction)
- *                           is implicit from the blank's local center.
- * @param sign               −1 for the LEFT blank, +1 for the RIGHT blank.
- *                           Determines which X face the counterbore sits on
- *                           (the face nearest the workpiece, i.e. the side
- *                           opposite the L-bracket pillar).
- * @param boltSize           Nominal bolt diameter (mm).
- * @param screwheadDiameter  Counterbore diameter — the SHCS head clearance (mm).
- * @param screwheadHeight    Counterbore depth into the blank (mm). Clamped so
- *                           at least 1 mm of through-only material is left
- *                           between the counterbore floor and the outer face.
+ * @param positions          Hole centerlines in LOCAL frame (blank at origin,
+ *                           `x = 0` per hole; the through-axis is world X).
+ * @param sign               −1 LEFT blank, +1 RIGHT blank. Determines which
+ *                           face the counterbore recess opens onto (always the
+ *                           inner / workpiece-facing face).
+ * @param holeDiameter       Through-hole diameter, cut exactly (mm).
+ * @param counterboreDiameter SHCS-head recess diameter (mm).
+ * @param counterboreDepth   Recess depth into the inner face (mm).
  * @param thickness          Blank X extent — `jawBlank.thickness` (mm).
- * @returns Merged hole-tool geometry, or `null` if `positions` is empty.
+ * @returns Merged hole-cutter geometry, or `null` if nothing to cut.
  */
-function buildLetterGeometry(char: string, w: number, h: number, s: number, d: number): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  
-  const addBar = (x: number, y: number, bw: number, bh: number) => {
-    const box = new THREE.BoxGeometry(bw, bh, d);
-    box.translate(x + bw / 2, y + bh / 2, 0);
-    parts.push(box);
-  };
-
-  switch (char) {
-    case 'L':
-      addBar(0, 0, s, h);
-      addBar(0, 0, w, s);
-      break;
-    case 'E':
-      addBar(0, 0, s, h);
-      addBar(0, 0, w, s);
-      addBar(0, (h - s) / 2, w * 0.8, s);
-      addBar(0, h - s, w, s);
-      break;
-    case 'F':
-      addBar(0, 0, s, h);
-      addBar(0, (h - s) / 2, w * 0.8, s);
-      addBar(0, h - s, w, s);
-      break;
-    case 'T':
-      addBar((w - s) / 2, 0, s, h);
-      addBar(0, h - s, w, s);
-      break;
-    case 'R':
-      addBar(0, 0, s, h);
-      addBar(0, h - s, w, s);
-      addBar(w - s, h / 2, s, h / 2);
-      addBar(0, h / 2, w, s);
-      addBar(w - s, 0, s, h / 2);
-      break;
-    case 'I':
-      addBar((w - s) / 2, 0, s, h);
-      addBar(0, 0, w, s);
-      addBar(0, h - s, w, s);
-      break;
-    case 'G':
-      addBar(0, 0, s, h);
-      addBar(0, 0, w, s);
-      addBar(0, h - s, w, s);
-      addBar(w - s, 0, s, h / 2 + s / 2);
-      addBar(w / 2, h / 2 - s / 2, w / 2, s);
-      break;
-    case 'H':
-      addBar(0, 0, s, h);
-      addBar(w - s, 0, s, h);
-      addBar(0, (h - s) / 2, w, s);
-      break;
-    default:
-      addBar(0, 0, w, h);
-      break;
-  }
-
-  const merged = mergeGeometries(parts, false);
-  for (const g of parts) g.dispose();
-  return merged;
-}
-
-function buildWordGeometry(
-  text: string,
-  w: number,
-  h: number,
-  s: number,
-  d: number,
-  spacing: number
-): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  const n = text.length;
-  const totalW = n * w + (n - 1) * spacing;
-  
-  for (let i = 0; i < n; i++) {
-    const char = text[i];
-    const letterGeo = buildLetterGeometry(char, w, h, s, d);
-    const xPos = -totalW / 2 + i * (w + spacing);
-    letterGeo.translate(xPos, 0, 0);
-    parts.push(letterGeo);
-  }
-  
-  const merged = mergeGeometries(parts, false);
-  for (const g of parts) g.dispose();
-  return merged;
-}
-
-function buildLabelGeometry(
-  text: string,
-  thickness: number,
-  height: number,
-  face: number
-): THREE.BufferGeometry {
-  const letterH = Math.max(5, Math.min(8, height * 0.12, thickness * 0.12));
-  const letterW = letterH * 0.7;
-  const stroke = letterH * 0.18;
-  const spacing = letterH * 0.2;
-  const debossDepth = 1.0;
-  const overshoot = 0.4;
-  const totalDepth = debossDepth + overshoot;
-
-  const label = buildWordGeometry(text, letterW, letterH, stroke, totalDepth, spacing);
-  label.translate(0, -letterH / 2, 0);
-  label.translate(0, 0, face / 2 - 0.3);
-  return label;
-}
-
 export function buildHoleToolGeometry(
-  positions:         HolePosition[],
-  sign:              -1 | 1,
-  boltSize:          number,
-  screwheadDiameter: number,
-  screwheadHeight:   number,
-  thickness:         number,
-  height:            number,
-  face:              number,
+  positions:            HolePosition[],
+  sign:                 -1 | 1,
+  holeDiameter:         number,
+  counterboreDiameter:  number,
+  counterboreDepth:     number,
+  thickness:            number,
 ): THREE.BufferGeometry | null {
-  if (thickness <= 0 || height <= 0 || face <= 0) return null;
+  if (positions.length === 0) return null;
+  if (holeDiameter <= 0 || thickness <= 0) return null;
+
+  const throughR = holeDiameter / 2;
+  const cbR      = counterboreDiameter / 2;
+  // Clamp recess depth so a solid wall always remains behind it.
+  const cbDepth  = Math.max(0, Math.min(counterboreDepth, thickness - MIN_WALL));
+  const half     = thickness / 2;
+  const O        = THROUGH_OVERSHOOT;
+
+  // Whether this hole actually has a counterbore step.
+  const stepped = cbDepth > 0 && cbR > throughR;
 
   const parts: THREE.BufferGeometry[] = [];
 
-  // Generate debossed label "LEFT" or "RIGHT"
-  const labelText = sign === -1 ? 'LEFT' : 'RIGHT';
-  const labelGeo = buildLabelGeometry(labelText, thickness, height, face);
-  parts.push(labelGeo);
+  for (const p of positions) {
+    let holeGeo: THREE.BufferGeometry;
 
-  // If there are bolt holes, build and add them
-  if (positions.length > 0 && boltSize > 0) {
-    const throughR = boltSize / 2 + HOLE_CLEARANCE;
-    const throughL = thickness + THROUGH_OVERSHOOT * 2;
-    const cbDepth = Math.max(0, Math.min(screwheadHeight, thickness - 1));
-    const cbR     = Math.max(0, screwheadDiameter / 2);
-    const cbL     = cbDepth + THROUGH_OVERSHOOT;
-
-    for (const p of positions) {
-      if (cbDepth > 0 && cbR > throughR) {
-        const points: THREE.Vector2[] = [];
-        const totalL = thickness + THROUGH_OVERSHOOT * 2;
-        points.push(new THREE.Vector2(0, -totalL / 2));
-        points.push(new THREE.Vector2(throughR, -totalL / 2));
-        points.push(new THREE.Vector2(throughR, totalL / 2 - cbL));
-        points.push(new THREE.Vector2(cbR, totalL / 2 - cbL));
-        points.push(new THREE.Vector2(cbR, totalL / 2));
-        points.push(new THREE.Vector2(0, totalL / 2));
-
-        const lathe = new THREE.LatheGeometry(points, CYL_SEGMENTS);
-        lathe.rotateZ(Math.PI / 2);
-
-        if (sign === -1) {
-          lathe.rotateY(Math.PI);
-        }
-
-        lathe.translate(p.x, p.y, p.z);
-        parts.push(lathe);
-      } else {
-        const through = new THREE.CylinderGeometry(throughR, throughR, throughL, CYL_SEGMENTS);
-        through.rotateZ(Math.PI / 2);
-        through.translate(p.x, p.y, p.z);
-        parts.push(through);
-      }
+    if (stepped) {
+      // Lathe profile (radius, axial). Counterbore at +axial end → after the
+      // rotateZ below it lands on the inner face. Through-hole runs to the
+      // −axial end (outer face). Both ends overshoot by O.
+      const profile: THREE.Vector2[] = [
+        new THREE.Vector2(0,        -half - O),       // P0 outer-face axis
+        new THREE.Vector2(throughR, -half - O),       // P1 outer rim
+        new THREE.Vector2(throughR,  half - cbDepth),  // P2 bore up to step
+        new THREE.Vector2(cbR,       half - cbDepth),  // P3 step ledge (90°)
+        new THREE.Vector2(cbR,       half + O),        // P4 counterbore wall
+        new THREE.Vector2(0,         half + O),        // P5 inner-face axis
+      ];
+      holeGeo = new THREE.LatheGeometry(profile, CYL_SEGMENTS);
+    } else {
+      // No counterbore — plain through-hole, both ends overshooting.
+      holeGeo = new THREE.CylinderGeometry(throughR, throughR, thickness + O * 2, CYL_SEGMENTS);
     }
+
+    // Lathe/Cylinder axis is local +Y → rotate to world +X (clamping axis).
+    holeGeo.rotateZ(Math.PI / 2);
+    // After rotateZ, the counterbore (+axial) sits at −X. The RIGHT jaw's
+    // inner face is −X, so sign=+1 is already correct; flip for the LEFT jaw.
+    if (sign === -1) holeGeo.rotateY(Math.PI);
+
+    holeGeo.translate(p.x, p.y, p.z);
+    parts.push(holeGeo);
   }
 
   const merged = mergeGeometries(parts, false);

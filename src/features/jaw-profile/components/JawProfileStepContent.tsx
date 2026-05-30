@@ -24,6 +24,7 @@ export function JawProfileStepContent() {
   const viseConfig        = useViseStore((s) => s.viseConfig);
   const setHovered        = useDimensionHoverStore((s) => s.setHovered);
   const clearHover        = useDimensionHoverStore((s) => s.clear);
+  const updateJawProfile  = useSoftJawsStore((s) => s.updateJawProfile);
   const { status, error, faceCount, generate } = useJawProfile();
 
   const gate        = getStepGate('jaw-profile', { partCount, profileGenerated });
@@ -48,10 +49,10 @@ export function JawProfileStepContent() {
     if (!activePart || partSpanX === null) return { leftOverlap: 0, rightOverlap: 0 };
     const innerX = bracketInnerX(viseConfig);
     const leftFaceXActual = -innerX + jawBlank.left.thickness;
-    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile);
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false });
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
-    const leftFaceXDefault = -innerX + 30.0;
+    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
     const snapX = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
     const partCenterWorldX = snapX + activePart.transform.position.x;
     
@@ -119,6 +120,41 @@ export function JawProfileStepContent() {
             ℹ Pocket depths are derived directly from the workpiece's visual overlap on the jaw blanks. 
             Adjust jaw thickness (Step 3) or vise stroke (Step 1) to alter the overlaps.
           </p>
+        </div>
+      )}
+
+      {/* ── 3D Viewport Controls ──────────────────────────────────── */}
+      {activePart && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            3D Viewport Controls
+          </p>
+          <div className="flex flex-col gap-2.5">
+            <label className="flex items-center justify-between text-xs cursor-pointer select-none">
+              <span className="text-muted-foreground font-tech">Show Workpiece</span>
+              <input
+                type="checkbox"
+                checked={jawProfile.showWorkpiece ?? true}
+                onChange={(e) => updateJawProfile({ showWorkpiece: e.target.checked })}
+                className="h-3.5 w-3.5 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer"
+              />
+            </label>
+            <label className={`flex items-center justify-between text-xs select-none transition-opacity ${!(jawProfile.showWorkpiece ?? true) ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}>
+              <span className="text-muted-foreground font-tech">Ghost Mode (Transparent)</span>
+              <input
+                type="checkbox"
+                checked={jawProfile.ghostWorkpiece ?? false}
+                disabled={!(jawProfile.showWorkpiece ?? true)}
+                onChange={(e) => updateJawProfile({ ghostWorkpiece: e.target.checked })}
+                className="h-3.5 w-3.5 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed"
+              />
+            </label>
+          </div>
+          {profileGenerated && (
+            <p className="text-[9.5px] text-primary/80 font-tech leading-relaxed pl-1 border-l-2 border-primary/40 mt-1">
+              💡 Enable <strong>Ghost Mode</strong> or hide the workpiece to inspect the pocket cavities cut into the jaws.
+            </p>
+          )}
         </div>
       )}
 

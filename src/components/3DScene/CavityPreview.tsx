@@ -89,14 +89,14 @@ export function CavityPreview() {
 
     // Same source-of-truth math as PartMeshes / JawBlankMesh / useJawProfile.
     const leftFaceX    = -innerX + jawBlank.left.thickness;          // left jaw inner face
-    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile);
+    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false });
     const rightFaceX   = rightCenter - jawBlank.right.thickness / 2;  // right jaw inner face
 
     const partSpanX    = computeWorldSpanX(activePart);
     const partHeight   = activePart.boundingBox.max[1] - activePart.boundingBox.min[1];
 
     // Default snapping point of the part at design-time
-    const leftFaceXDefault = -innerX + 30.0;
+    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
     const snapX        = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
 
     // World coordinates of the part:

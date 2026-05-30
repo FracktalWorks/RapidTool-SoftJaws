@@ -196,16 +196,16 @@ export function useJawProfile(): UseJawProfileReturn {
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
     const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
-    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, jawProfile);
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, { ...jawProfile, generated: false });
     
     const leftFaceXActual = -innerX + jawBlank.left.thickness;
-    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, jawProfile);
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false });
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
     const partSpanX    = computeWorldSpanX(part);
     
     // Default snapping point of the part at design-time
-    const leftFaceXDefault = -innerX + 30.0;
+    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
     const snapX        = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
     
     // Word coordinates of the part:
@@ -354,7 +354,9 @@ export function useJawProfile(): UseJawProfileReturn {
       updateJawProfile({
         leftDepth: leftOverlap,
         rightDepth: rightOverlap,
-        generated: true
+        generated: true,
+        showWorkpiece: true,
+        ghostWorkpiece: true,
       });
       setFaceCount(leftFaceCount + rightFaceCount);
       setStatus('success');

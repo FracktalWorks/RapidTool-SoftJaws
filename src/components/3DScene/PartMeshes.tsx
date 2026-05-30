@@ -63,6 +63,9 @@ function PartMesh({
   const jawBlank = useSoftJawsStore((s) => s.jawBlank);
   const viseConfig = useViseStore((s) => s.viseConfig);
 
+  const showWorkpiece = jawProfile.showWorkpiece ?? true;
+  const ghostWorkpiece = jawProfile.ghostWorkpiece ?? false;
+
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
   // While true, useLayoutEffect must NOT re-apply store values.
@@ -207,6 +210,7 @@ function PartMesh({
         onDoubleClick={handleDoubleClick}
         castShadow
         receiveShadow
+        visible={showWorkpiece}
       >
         <meshStandardMaterial
           color={color}
@@ -215,6 +219,8 @@ function PartMesh({
           side={THREE.DoubleSide}
           emissive={isActive ? color : '#000000'}
           emissiveIntensity={isActive ? 0.1 : 0}
+          transparent={ghostWorkpiece}
+          opacity={ghostWorkpiece ? 0.25 : 1.0}
         />
       </mesh>
     </SelectableTransformControls>

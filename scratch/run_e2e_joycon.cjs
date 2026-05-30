@@ -30,9 +30,7 @@ const fs = require('fs');
   const page = await context.newPage();
   
   page.on('console', msg => {
-    if (msg.type() === 'error') {
-      console.log(`[PAGE ERROR]: ${msg.text()}`);
-    }
+    console.log(`[PAGE LOG]: [${msg.type().toUpperCase()}] ${msg.text()}`);
   });
 
   try {

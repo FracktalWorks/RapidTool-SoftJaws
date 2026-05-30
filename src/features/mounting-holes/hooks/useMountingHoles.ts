@@ -125,7 +125,7 @@ async function drillSideLocal(
   );
 
   const tool = buildHoleToolGeometry(
-    positions, sign, boltSize, screwheadDiameter, screwheadHeight, thickness, height, face
+    positions, sign, boltSize, screwheadDiameter, screwheadHeight, thickness,
   );
   if (!tool) {
     baseGeo.dispose();

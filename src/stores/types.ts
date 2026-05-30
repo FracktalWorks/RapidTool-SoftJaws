@@ -77,6 +77,8 @@ export interface JawProfileConfig {
   leftDepth: number;
   rightDepth: number;
   generated: boolean;
+  showWorkpiece?: boolean;
+  ghostWorkpiece?: boolean;
 }
 
 export interface GripFeaturesConfig {

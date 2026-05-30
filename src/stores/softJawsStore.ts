@@ -66,6 +66,8 @@ const INITIAL_STATE: SoftJawsState = {
     leftDepth: 5.0,
     rightDepth: 5.0,
     generated: false,
+    showWorkpiece: true,
+    ghostWorkpiece: false,
   },
   gripFeatures: {
     pattern: 'none',
@@ -230,7 +232,10 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
             (config.leftDepth !== undefined && config.leftDepth !== state.jawProfile.leftDepth) ||
             (config.rightDepth !== undefined && config.rightDepth !== state.jawProfile.rightDepth);
           Object.assign(state.jawProfile, config);
-          if (csgInputChanged) state.jawProfile.generated = false;
+          if (csgInputChanged && config.generated !== true) {
+            state.jawProfile.generated = false;
+            state.jawProfile.ghostWorkpiece = false;
+          }
         }),
 
       updateGripFeatures: (config) =>

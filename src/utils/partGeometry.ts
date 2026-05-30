@@ -73,10 +73,10 @@ export function rightBracketInnerX(
     const rightFaceX = partRightX - rightOverlap;
     return Math.min(fixedInnerX, rightFaceX + jawBlank.right.thickness);
   } else {
-    // Design-time positioning using reference thickness 30.0 and target depth
-    const leftFaceX     = -fixedInnerX + 30.0;
+    // Design-time positioning using actual thicknesses and target depth
+    const leftFaceX     = -fixedInnerX + jawBlank.left.thickness;
     const partRightEdge = leftFaceX - profile.depth + worldWidth;
-    return Math.min(fixedInnerX, partRightEdge - profile.depth + 30.0);
+    return Math.min(fixedInnerX, partRightEdge - profile.depth + jawBlank.right.thickness);
   }
 }
 
@@ -116,7 +116,7 @@ export function partSnapX(
     const leftFaceX = -fixedInnerX + leftThickness;
     return leftFaceX - leftOverlap + worldWidth / 2;
   } else {
-    const leftFaceX = -fixedInnerX + 30.0;
+    const leftFaceX = -fixedInnerX + leftThickness;
     return leftFaceX - profile.depth + worldWidth / 2;
   }
 }
