@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Swept Volume Processor — Types
  *
  * Mirrors the structure of `offset/types.ts` so this module can drop into
@@ -72,6 +72,18 @@ export interface SweptMeshOptions {
    * Default: true.
    */
   accumulate?: boolean;
+
+  /**
+   * Optional lower bound limit for the sweep slice range along the sweep axis.
+   * If set, slices are generated down to this limit and filled with the bottom profile.
+   */
+  limitMin?: number | null;
+
+  /**
+   * Optional upper bound limit for the sweep slice range along the sweep axis.
+   * If set, slices are generated up to this limit and filled with the top profile.
+   */
+  limitMax?: number | null;
 
   /** Progress callback (current, total, stage). */
   progressCallback?: ((current: number, total: number, stage: string) => void) | null;
@@ -171,5 +183,7 @@ export const DEFAULT_SWEEP_SETTINGS: Required<Omit<SweptMeshOptions, 'progressCa
   offsetDistance: 0,
   contourOffset: 0,
   accumulate: true,
+  limitMin: null,
+  limitMax: null,
   progressCallback: null,
 };

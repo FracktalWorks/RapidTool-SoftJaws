@@ -13,6 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import * as THREE from 'three';
+import JSZip from 'jszip';
 import { meshToSTL, downloadFile } from '@rapidtool/cad-core';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import {
@@ -72,13 +73,14 @@ export function useExport(): UseExportReturn {
     setStatus('running');
     setError(null);
 
-    // Defer so "running" state renders before the synchronous STL work.
-    setTimeout(() => {
+    (async () => {
       try {
         const sides = [
           { label: 'Left',  holedKey: JAW_HOLED_CACHE_KEY_LEFT,  profileKey: JAW_PROFILE_CACHE_KEY_LEFT,  dims: jawBlank.left  },
           { label: 'Right', holedKey: JAW_HOLED_CACHE_KEY_RIGHT, profileKey: JAW_PROFILE_CACHE_KEY_RIGHT, dims: jawBlank.right },
         ] as const;
+
+        const zip = new JSZip();
 
         for (const { label, holedKey, profileKey, dims } of sides) {
           const cached = geometryCache.get(profileKey) ?? geometryCache.get(holedKey);
@@ -87,8 +89,11 @@ export function useExport(): UseExportReturn {
             : buildBlankMesh(dims.thickness, dims.height, dims.face);
 
           const stlData = meshToSTL(mesh, { binary: true });
-          downloadFile(stlData, `SoftJaw-${label}.stl`, 'application/sla');
+          zip.file(`SoftJaw-${label}.stl`, stlData);
         }
+
+        const zipContent = await zip.generateAsync({ type: 'arraybuffer' });
+        downloadFile(zipContent, 'SoftJaws.zip', 'application/zip');
 
         setStatus('success');
       } catch (err) {
@@ -97,7 +102,7 @@ export function useExport(): UseExportReturn {
         setError(msg);
         setStatus('error');
       }
-    }, 0);
+    })();
   }, [jawBlank, exportConfig]);
 
   return { status, error, exportJaws };

@@ -327,9 +327,13 @@ export function useJawProfile(): UseJawProfileReturn {
         );
       }
 
-      if (leftFaceCount < MIN_VALID_FACE_COUNT || rightFaceCount < MIN_VALID_FACE_COUNT) {
+      // Allow one jaw to remain uncut (12 faces) if it has no overlap.
+      // But at least one jaw must have a cut (face count > 12).
+      const leftIsCut = leftFaceCount > 12;
+      const rightIsCut = rightFaceCount > 12;
+      if (!leftIsCut && !rightIsCut) {
         throw new Error(
-          'CSG produced an empty cut — the part does not overlap the jaw clamping zone. ' +
+          'CSG produced an empty cut — the part does not overlap either jaw blank clamping zone. ' +
           'Check that the part is positioned between the jaws and that pocket depth is > 0.',
         );
       }

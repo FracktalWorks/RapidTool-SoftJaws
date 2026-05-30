@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three'
+import * as THREE from 'three'
 import { MeshBVH, NOT_INTERSECTED, INTERSECTED } from 'three-mesh-bvh'
 import polygonClipping from 'polygon-clipping'
 import earcut from 'earcut'
@@ -469,7 +469,7 @@ function offsetMultiPoly(multiPoly, offset) {
 // PUBLIC API
 // =============================================================================
 
-export function extractContour(geometry, direction, { layerHeight = 0.2, offset = 0 } = {}) {
+export function extractContour(geometry, direction, { layerHeight = 0.2, offset = 0, limitMin = null, limitMax = null } = {}) {
   const dir = new THREE.Vector3(direction.x, direction.y, direction.z)
   if (dir.lengthSq() < 1e-10) throw new Error('Sweep direction is zero vector')
   dir.normalize()
@@ -489,6 +489,9 @@ export function extractContour(geometry, direction, { layerHeight = 0.2, offset 
     if (d < eMin) eMin = d
     if (d > eMax) eMax = d
   }
+
+  const scanMin = limitMin !== null ? Math.min(eMin, limitMin) : eMin
+  const scanMax = limitMax !== null ? Math.max(eMax, limitMax) : eMax
 
   const { lx, ly } = makeBasis(dir)
 
@@ -517,8 +520,20 @@ export function extractContour(geometry, direction, { layerHeight = 0.2, offset 
     return { segs, loops, usedPlaneD: planeD }
   }
 
-  for (let planeD = eMin + layerHeight * 0.5; planeD < eMax; planeD += layerHeight) {
+  for (let planeD = scanMin + layerHeight * 0.5; planeD < scanMax; planeD += layerHeight) {
     totalSlices++
+
+    // If we are outside the actual mesh bounding box, push an empty slice placeholder directly
+    if (planeD < eMin || planeD > eMax) {
+      slices.push({
+        planeD: planeD,
+        poly: null,
+        shapes: null,
+        signature: '',
+      })
+      continue
+    }
+
     let { segs: segments, loops: loops3D, usedPlaneD } = sliceAt(planeD)
 
     // Jitter retry if we got nothing usable
@@ -699,7 +714,13 @@ export function accumulateContours(contour) {
         })
       } else {
         skip.leadingNullsDropped++
-        skipDetails.push(`${sliceLabel}: poly null/empty AND no prior valid slice — dropped (cannot carry forward from nothing)`)
+        skipDetails.push(`${sliceLabel}: poly null/empty AND no prior valid slice — keeping as placeholder to fill backward`)
+        accSlices.push({
+          planeD:    slice.planeD,
+          poly:      null,
+          shapes:    null,
+          signature: '',
+        })
       }
       continue
     }
@@ -776,6 +797,26 @@ export function accumulateContours(contour) {
       `input=${slices.length}, nullPoly=${skip.nullPoly}, unionFailed=${skip.unionFailed}, ` +
       `emptyShapes=${skip.emptyShapes}, leadingNullsDropped=${skip.leadingNullsDropped}.`
     )
+  }
+
+  // Fill leading null slices backward with the first valid slice profile
+  let firstValid = null
+  for (const s of accSlices) {
+    if (s.poly !== null && s.poly.length > 0) {
+      firstValid = s
+      break
+    }
+  }
+  if (firstValid) {
+    for (let i = 0; i < accSlices.length; i++) {
+      if (accSlices[i].poly === null) {
+        accSlices[i].poly = firstValid.poly
+        accSlices[i].shapes = firstValid.shapes
+        accSlices[i].signature = firstValid.signature
+      } else {
+        break
+      }
+    }
   }
 
   // Reconstruct loops3D from the accumulated 2D polygons so the viewer shows

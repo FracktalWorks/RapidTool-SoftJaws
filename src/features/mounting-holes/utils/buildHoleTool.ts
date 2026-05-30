@@ -76,6 +76,114 @@ const CYL_SEGMENTS      = 48;
  * @param thickness          Blank X extent — `jawBlank.thickness` (mm).
  * @returns Merged hole-tool geometry, or `null` if `positions` is empty.
  */
+function buildLetterGeometry(char: string, w: number, h: number, s: number, d: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  
+  const addBar = (x: number, y: number, bw: number, bh: number) => {
+    const box = new THREE.BoxGeometry(bw, bh, d);
+    box.translate(x + bw / 2, y + bh / 2, 0);
+    parts.push(box);
+  };
+
+  switch (char) {
+    case 'L':
+      addBar(0, 0, s, h);
+      addBar(0, 0, w, s);
+      break;
+    case 'E':
+      addBar(0, 0, s, h);
+      addBar(0, 0, w, s);
+      addBar(0, (h - s) / 2, w * 0.8, s);
+      addBar(0, h - s, w, s);
+      break;
+    case 'F':
+      addBar(0, 0, s, h);
+      addBar(0, (h - s) / 2, w * 0.8, s);
+      addBar(0, h - s, w, s);
+      break;
+    case 'T':
+      addBar((w - s) / 2, 0, s, h);
+      addBar(0, h - s, w, s);
+      break;
+    case 'R':
+      addBar(0, 0, s, h);
+      addBar(0, h - s, w, s);
+      addBar(w - s, h / 2, s, h / 2);
+      addBar(0, h / 2, w, s);
+      addBar(w - s, 0, s, h / 2);
+      break;
+    case 'I':
+      addBar((w - s) / 2, 0, s, h);
+      addBar(0, 0, w, s);
+      addBar(0, h - s, w, s);
+      break;
+    case 'G':
+      addBar(0, 0, s, h);
+      addBar(0, 0, w, s);
+      addBar(0, h - s, w, s);
+      addBar(w - s, 0, s, h / 2 + s / 2);
+      addBar(w / 2, h / 2 - s / 2, w / 2, s);
+      break;
+    case 'H':
+      addBar(0, 0, s, h);
+      addBar(w - s, 0, s, h);
+      addBar(0, (h - s) / 2, w, s);
+      break;
+    default:
+      addBar(0, 0, w, h);
+      break;
+  }
+
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
+function buildWordGeometry(
+  text: string,
+  w: number,
+  h: number,
+  s: number,
+  d: number,
+  spacing: number
+): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const n = text.length;
+  const totalW = n * w + (n - 1) * spacing;
+  
+  for (let i = 0; i < n; i++) {
+    const char = text[i];
+    const letterGeo = buildLetterGeometry(char, w, h, s, d);
+    const xPos = -totalW / 2 + i * (w + spacing);
+    letterGeo.translate(xPos, 0, 0);
+    parts.push(letterGeo);
+  }
+  
+  const merged = mergeGeometries(parts, false);
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
+function buildLabelGeometry(
+  text: string,
+  thickness: number,
+  height: number,
+  face: number
+): THREE.BufferGeometry {
+  const letterH = Math.max(5, Math.min(8, height * 0.12, thickness * 0.12));
+  const letterW = letterH * 0.7;
+  const stroke = letterH * 0.18;
+  const spacing = letterH * 0.2;
+  const debossDepth = 1.0;
+  const overshoot = 0.4;
+  const totalDepth = debossDepth + overshoot;
+
+  const label = buildWordGeometry(text, letterW, letterH, stroke, totalDepth, spacing);
+  label.translate(0, -letterH / 2, 0);
+  label.translate(0, 0, face / 2 - 0.3);
+  return label;
+}
+
 export function buildHoleToolGeometry(
   positions:         HolePosition[],
   sign:              -1 | 1,
@@ -83,71 +191,56 @@ export function buildHoleToolGeometry(
   screwheadDiameter: number,
   screwheadHeight:   number,
   thickness:         number,
+  height:            number,
+  face:              number,
 ): THREE.BufferGeometry | null {
-  if (positions.length === 0) return null;
-  if (boltSize <= 0 || thickness <= 0) return null;
+  if (thickness <= 0 || height <= 0 || face <= 0) return null;
 
-  // ── Through-hole — slip-fit cylinder, full thickness + epsilon both ends ─
-  const throughR = boltSize / 2 + HOLE_CLEARANCE;
-  const throughL = thickness + THROUGH_OVERSHOOT * 2;
-
-  // ── Counterbore — clamp depth so we always leave >= 1 mm wall behind. ───
-  // Without this, an over-deep screwhead would push the counterbore floor
-  // past the OUTER face — creating a second coplanar artifact there.
-  const cbDepth = Math.max(0, Math.min(screwheadHeight, thickness - 1));
-  const cbR     = Math.max(0, screwheadDiameter / 2);
-  const cbL     = cbDepth + THROUGH_OVERSHOOT;
-
-  // ── Geometry of one cutter pair, in LOCAL coords ─────────────────────────
   const parts: THREE.BufferGeometry[] = [];
 
-  for (const p of positions) {
-    if (cbDepth > 0 && cbR > throughR) {
-      // Create a stepped cylinder using LatheGeometry to avoid intersecting/overlapping geometry.
-      // A self-intersecting cutter mesh (like nested cylinders) confuses three-bvh-csg,
-      // leaving a solid core inside the counterbore. A lathe profile creates a single,
-      // closed, manifold stepped cylinder with no internal faces.
-      const points: THREE.Vector2[] = [];
-      const totalL = thickness + THROUGH_OVERSHOOT * 2;
+  // Generate debossed label "LEFT" or "RIGHT"
+  const labelText = sign === -1 ? 'LEFT' : 'RIGHT';
+  const labelGeo = buildLabelGeometry(labelText, thickness, height, face);
+  parts.push(labelGeo);
 
-      // Profile in the X-Y plane (X is radius, Y is height along the axis).
-      // We define points from bottom (Y = -totalL/2) to top (Y = totalL/2).
-      // Since it goes bottom-to-top, LatheGeometry's normals point outwards.
-      //
-      // 1. Center of the through-hole exit cap
-      points.push(new THREE.Vector2(0, -totalL / 2));
-      // 2. Outer wall of the through-hole at the exit
-      points.push(new THREE.Vector2(throughR, -totalL / 2));
-      // 3. Inner corner of the counterbore shoulder (transition from through-hole)
-      points.push(new THREE.Vector2(throughR, totalL / 2 - cbL));
-      // 4. Outer corner of the counterbore shoulder (floor)
-      points.push(new THREE.Vector2(cbR, totalL / 2 - cbL));
-      // 5. Outer rim of the counterbore entrance
-      points.push(new THREE.Vector2(cbR, totalL / 2));
-      // 6. Center of the counterbore entrance cap
-      points.push(new THREE.Vector2(0, totalL / 2));
+  // If there are bolt holes, build and add them
+  if (positions.length > 0 && boltSize > 0) {
+    const throughR = boltSize / 2 + HOLE_CLEARANCE;
+    const throughL = thickness + THROUGH_OVERSHOOT * 2;
+    const cbDepth = Math.max(0, Math.min(screwheadHeight, thickness - 1));
+    const cbR     = Math.max(0, screwheadDiameter / 2);
+    const cbL     = cbDepth + THROUGH_OVERSHOOT;
 
-      const lathe = new THREE.LatheGeometry(points, CYL_SEGMENTS);
-      lathe.rotateZ(Math.PI / 2); // align Y axis to X axis
+    for (const p of positions) {
+      if (cbDepth > 0 && cbR > throughR) {
+        const points: THREE.Vector2[] = [];
+        const totalL = thickness + THROUGH_OVERSHOOT * 2;
+        points.push(new THREE.Vector2(0, -totalL / 2));
+        points.push(new THREE.Vector2(throughR, -totalL / 2));
+        points.push(new THREE.Vector2(throughR, totalL / 2 - cbL));
+        points.push(new THREE.Vector2(cbR, totalL / 2 - cbL));
+        points.push(new THREE.Vector2(cbR, totalL / 2));
+        points.push(new THREE.Vector2(0, totalL / 2));
 
-      if (sign === -1) {
-        // Rotate 180 degrees around Y to flip the counterbore from negative X to positive X
-        lathe.rotateY(Math.PI);
+        const lathe = new THREE.LatheGeometry(points, CYL_SEGMENTS);
+        lathe.rotateZ(Math.PI / 2);
+
+        if (sign === -1) {
+          lathe.rotateY(Math.PI);
+        }
+
+        lathe.translate(p.x, p.y, p.z);
+        parts.push(lathe);
+      } else {
+        const through = new THREE.CylinderGeometry(throughR, throughR, throughL, CYL_SEGMENTS);
+        through.rotateZ(Math.PI / 2);
+        through.translate(p.x, p.y, p.z);
+        parts.push(through);
       }
-
-      lathe.translate(p.x, p.y, p.z);
-      parts.push(lathe);
-    } else {
-      // Straight through-hole only
-      const through = new THREE.CylinderGeometry(throughR, throughR, throughL, CYL_SEGMENTS);
-      through.rotateZ(Math.PI / 2);
-      through.translate(p.x, p.y, p.z);
-      parts.push(through);
     }
   }
 
   const merged = mergeGeometries(parts, false);
-  // Per-part buffers are now owned by `merged` — free the originals.
   for (const g of parts) g.dispose();
   return merged;
 }

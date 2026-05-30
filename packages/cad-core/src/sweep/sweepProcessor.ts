@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Swept Volume Processor — Main API
  *
  * High-level wrapper around the slice/accumulate/loft pipeline in
@@ -143,6 +143,8 @@ export async function createSweptMesh(
     offsetDistance: options.offsetDistance ?? DEFAULT_SWEEP_SETTINGS.offsetDistance,
     contourOffset:  options.contourOffset  ?? DEFAULT_SWEEP_SETTINGS.contourOffset,
     accumulate:     options.accumulate     ?? DEFAULT_SWEEP_SETTINGS.accumulate,
+    limitMin:       options.limitMin       ?? null,
+    limitMax:       options.limitMax       ?? null,
     progressCallback: options.progressCallback ?? null,
   };
 
@@ -174,6 +176,8 @@ export async function createSweptMesh(
   let contour = extractContour(geom, dir, {
     layerHeight: cfg.layerHeight,
     offset:      cfg.contourOffset,
+    limitMin:    cfg.limitMin,
+    limitMax:    cfg.limitMax,
   });
   timings.extract = performance.now() - tB;
 
