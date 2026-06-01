@@ -39,7 +39,10 @@ const fs = require('fs');
 
   try {
     console.log('Navigating to http://localhost:5173...');
-    await page.goto('http://localhost:5173', { timeout: 10000 });
+    // Vite dev serves hundreds of unbundled ESM modules, so the full `load`
+    // event is slow. Wait for DOM ready instead and let the selector waits
+    // below confirm the app actually rendered.
+    await page.goto('http://localhost:5173', { timeout: 60000, waitUntil: 'domcontentloaded' });
     
     // Wait for the app logo/header to load
     await page.waitForSelector('text=soft jaws', { timeout: 15000 });
@@ -64,6 +67,17 @@ const fs = require('fs');
     console.log('Navigating to Jaw Blank Setup step...');
     const blankStepBtn = page.locator('button[title="Jaw Blank Setup"]');
     await blankStepBtn.click();
+    await page.waitForTimeout(1000);
+
+    // Set jaw thickness to 40mm to ensure physical overlap with the part
+    console.log('Setting jaw thicknesses to 40mm to generate overlap...');
+    const lengthRow = page.locator('div.group', { hasText: 'Length (X)' }).first();
+    const leftThicknessInput = lengthRow.locator('input').first();
+    const rightThicknessInput = lengthRow.locator('input').nth(1);
+    await leftThicknessInput.focus();
+    await leftThicknessInput.fill('40');
+    await rightThicknessInput.focus();
+    await rightThicknessInput.fill('40');
     await page.waitForTimeout(1000);
 
     // 4. Switch to "Jaw Profile" step

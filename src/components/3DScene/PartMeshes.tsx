@@ -24,8 +24,8 @@ import type { TransformData } from '@rapidtool/cad-ui';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
-import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, computeWorldSpanY, effectiveOverlap, partSnapX, RAIL_GAP_MM } from '@/utils/partGeometry';
+import { jawBaseH } from '@/features/vise-config/data/presets';
+import { computeWorldSpanY, partSnapX, RAIL_GAP_MM } from '@/utils/partGeometry';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -110,12 +110,6 @@ function PartMesh({
   // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
   // We must use the WIDTH (delta), NOT bbox.min[0] which is the original file coordinate.
   //
-  // DESIGN snapX: Always uses the design-time jawOverlap. This is the source of truth
-  // for the store and CSG subtraction.
-  const designSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, { ...jawProfile, generated: false }, jawBlank.clearance);
-  }, [viseConfig, jawBlank.left.thickness, jawBlank.clearance, jawProfile, part]);
-
   // RENDER snapX: Uses the effective (possibly shifted) overlap. This is what
   // the user sees in the 3D viewport.
   const renderSnapX = useMemo(() => {
@@ -167,17 +161,40 @@ function PartMesh({
   // ── Gizmo drag-end / close → bake world-space back into store ─────────
   const handleTransformChange = useCallback(
     ({ position: worldPos, rotation: worldRot }: TransformData) => {
+      const newRotDeg = {
+        x: worldRot.x * RAD2DEG,
+        y: worldRot.y * RAD2DEG,
+        z: worldRot.z * RAD2DEG,
+      };
+
+      // Did the rotation actually change (vs a pure translate)?
+      const rotationChanged =
+        Math.abs(newRotDeg.x - rot.x) > 0.01 ||
+        Math.abs(newRotDeg.y - rot.y) > 0.01 ||
+        Math.abs(newRotDeg.z - rot.z) > 0.01;
+
+      // ROTATION RE-SEATS ON THE RAIL.
+      //
+      // `baseY` is the auto-seat: jawBaseH + RAIL_GAP + computeWorldSpanY/2.
+      // It depends on the part's ROTATED world height, so it already places
+      // the rotated part's bottom on the rail. `pos.y` is the user's manual
+      // vertical nudge ON TOP of that seat.
+      //
+      // The bug: baking `pos.y = worldPos.y − baseY` here uses the PRE-rotation
+      // baseY (closure). After the rotation commits, baseY recomputes for the
+      // new orientation and the part jumps by the half-height delta — floating
+      // above the jaws when the part gets taller. So on a rotation change we
+      // reset the nudge to 0 (sit flat on the rail). A pure translate keeps
+      // the Y drag, measured against the current (unchanged) baseY.
+      const newY = rotationChanged ? 0 : (worldPos.y - baseY);
+
       updatePartTransform(part.id, {
         position: {
           x: 0, // X is mathematically locked to the fixed jaw, ignore gizmo drag
-          y: worldPos.y - baseY, // strip rail offset — store holds delta only
+          y: newY,
           z: worldPos.z,
         },
-        rotation: {
-          x: worldRot.x * RAD2DEG,
-          y: worldRot.y * RAD2DEG,
-          z: worldRot.z * RAD2DEG,
-        },
+        rotation: newRotDeg,
       });
       // Do NOT set gizmoActive = false here!
       // This callback fires on every drag-end while the mesh is still a
@@ -185,7 +202,7 @@ function PartMesh({
       // useLayoutEffect apply world-space values in local space, doubling
       // the offset. gizmoActive lifecycle is managed by handleSelectionChange.
     },
-    [part.id, updatePartTransform, baseY],
+    [part.id, updatePartTransform, baseY, rot.x, rot.y, rot.z],
   );
 
   if (!geometry) return null;

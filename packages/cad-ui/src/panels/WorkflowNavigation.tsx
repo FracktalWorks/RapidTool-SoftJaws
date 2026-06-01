@@ -79,6 +79,8 @@ export interface StepDefinition {
   icon: React.FC<{ className?: string }>;
   /** Whether this step can be skipped */
   skippable?: boolean;
+  /** Whether this step is disabled */
+  disabled?: boolean;
   /** Description or help text */
   description?: string;
 }
@@ -171,6 +173,7 @@ export const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
               <button
                 key={step.id}
                 onClick={() => onGoToStep(step.id)}
+                disabled={step.disabled}
                 className={`
                   relative flex items-center justify-center w-8 h-8 rounded-md transition-all
                   ${
@@ -182,6 +185,7 @@ export const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                           ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500/30'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                   }
+                  disabled:opacity-40 disabled:cursor-not-allowed
                 `}
                 title={`${step.label}${status === 'skipped' ? ' (Skipped)' : ''}${step.skippable ? ' (Optional)' : ''}`}
               >

@@ -4,7 +4,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useJawProfile } from '../hooks/useJawProfile';
 import { getStepGate } from '@/workflow';
 import { AXIS_TEXT_CLASS } from '@/utils/axisColors';
-import { computeWorldSpanX, rightBracketInnerX } from '@/utils/partGeometry';
+import { computeWorldSpanX, leftBracketInnerX, rightBracketInnerX } from '@/utils/partGeometry';
 import { useViseStore } from '@/stores/viseStore';
 import { bracketInnerX } from '@/features/vise-config/data/presets';
 import { useDimensionHoverStore } from '@/stores/dimensionHover';
@@ -47,21 +47,23 @@ export function JawProfileStepContent() {
   // Compute overlaps dynamically
   const { leftOverlap, rightOverlap } = useMemo(() => {
     if (!activePart || partSpanX === null) return { leftOverlap: 0, rightOverlap: 0 };
-    const innerX = bracketInnerX(viseConfig);
-    const leftFaceXActual = -innerX + jawBlank.left.thickness;
+    const leftInnerXActual = leftBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
     const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
+    
+    const leftFaceXActual = -leftInnerXActual + jawBlank.left.thickness;
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
-    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
-    const snapX = leftFaceXDefault + jawBlank.clearance + partSpanX / 2;
-    const partCenterWorldX = snapX + activePart.transform.position.x;
+    const partCenterWorldX = activePart.transform.position.x;
     
     const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
     const partRightEdgeX = partCenterWorldX + partSpanX / 2;
+
+    const maxLeftDepth = Math.max(0.0, jawBlank.left.thickness - BACK_WALL_MIN);
+    const maxRightDepth = Math.max(0.0, jawBlank.right.thickness - BACK_WALL_MIN);
     
     return {
-      leftOverlap: Math.max(0, leftFaceXActual - partLeftEdgeX),
-      rightOverlap: Math.max(0, partRightEdgeX - rightFaceXActual)
+      leftOverlap: Math.min(maxLeftDepth, Math.max(0.0, leftFaceXActual - partLeftEdgeX)),
+      rightOverlap: Math.min(maxRightDepth, Math.max(0.0, partRightEdgeX - rightFaceXActual))
     };
   }, [activePart, partSpanX, viseConfig, jawBlank, jawProfile]);
 

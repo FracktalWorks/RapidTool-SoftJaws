@@ -22,7 +22,7 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { rightJawCenterX } from '@/utils/partGeometry';
+import { leftJawCenterX, rightJawCenterX } from '@/utils/partGeometry';
 import { setOrbitControlsEnabled, resetPivotMatrix } from '@rapidtool/cad-core';
 
 const MATERIAL_COLORS: Record<string, string> = {
@@ -102,8 +102,7 @@ export function JawBlankMesh() {
   }, [rightHoledGeo]);
 
   const baseY = useMemo(() => jawBaseH(viseConfig.jawHeight), [viseConfig.jawHeight]);
-  const innerX = useMemo(() => bracketInnerX(viseConfig), [viseConfig]);
-  const leftXOff = useMemo(() => innerX - jawBlank.left.thickness / 2, [innerX, jawBlank.left.thickness]);
+  const leftXOff = useMemo(() => leftJawCenterX(viseConfig, jawBlank, activePart, jawProfile, jawBlank.clearance), [viseConfig, jawBlank, activePart, jawProfile]);
   const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile, jawBlank.clearance), [viseConfig, jawBlank, activePart, jawProfile]);
 
   const leftCenterY = useMemo(() => baseY + jawBlank.left.height / 2, [baseY, jawBlank.left.height]);

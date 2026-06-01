@@ -68,8 +68,8 @@ export function JawProfileMesh() {
   // For the LEFT mesh this delta is always zero (left bracket is fixed).
   const rightMeshOffsetX = useMemo(() => {
     if (!profileReady || !activePart) return 0;
-    const clampedCenter = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile);
-    const designCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false });
+    const clampedCenter = rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile, jawBlank.clearance);
+    const designCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
     return clampedCenter - designCenter;
   }, [profileReady, activePart, viseConfig, jawBlank, jawProfile]);
 

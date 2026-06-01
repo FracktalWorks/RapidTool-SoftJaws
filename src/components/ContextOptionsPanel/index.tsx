@@ -16,8 +16,9 @@ import {
   Download,
 } from 'lucide-react';
 import { useWorkflow } from '@/hooks/useWorkflow';
-import { STEP_CONFIG, SOFTJAWS_WORKFLOW_STEPS } from '@/workflow';
+import { STEP_CONFIG, SOFTJAWS_WORKFLOW_STEPS, getStepGate } from '@/workflow';
 import type { SoftJawsWorkflowStep } from '@/workflow';
+import { useSoftJawsStore } from '@/stores/softJawsStore';
 import {
   CollapsiblePanel,
   WorkflowNavigation,
@@ -56,19 +57,6 @@ const STEP_COMPONENTS: Record<SoftJawsWorkflowStep, React.FC> = {
   'export':         ExportStepContent,
 };
 
-// ─── Step definitions for WorkflowNavigation ──────────────────────────────────
-
-const WORKFLOW_STEP_DEFS: StepDefinition[] = SOFTJAWS_WORKFLOW_STEPS.map((stepId) => {
-  const meta = STEP_CONFIG[stepId];
-  return {
-    id: stepId,
-    label: meta.label,
-    icon: STEP_ICONS[stepId],
-    skippable: meta.skippable,
-    description: meta.description,
-  };
-});
-
 // ─── ContextOptionsPanel ────────────────────────────────────────────────────────
 
 export function ContextOptionsPanel() {
@@ -86,6 +74,34 @@ export function ContextOptionsPanel() {
     skipAndAdvance,
     goToStep,
   } = useWorkflow();
+
+  const partCount        = useSoftJawsStore((s) => s.parts.length);
+  const profileGenerated = useSoftJawsStore((s) => s.jawProfile.generated);
+
+  const workflowStepDefs = React.useMemo(() => {
+    return SOFTJAWS_WORKFLOW_STEPS.map((stepId) => {
+      const meta = STEP_CONFIG[stepId];
+      const gate = getStepGate(stepId, { partCount, profileGenerated });
+      return {
+        id: stepId,
+        label: meta.label,
+        icon: STEP_ICONS[stepId],
+        skippable: meta.skippable,
+        description: gate.allowed ? meta.description : `${meta.label} — ${gate.reason}`,
+        disabled: !gate.allowed,
+      };
+    });
+  }, [partCount, profileGenerated]);
+
+  const handleGoToStep = React.useCallback(
+    (stepId: string) => {
+      const gate = getStepGate(stepId as SoftJawsWorkflowStep, { partCount, profileGenerated });
+      if (gate.allowed) {
+        goToStep(stepId as SoftJawsWorkflowStep);
+      }
+    },
+    [goToStep, partCount, profileGenerated]
+  );
 
   if (!currentStep || !currentStepMeta) return null;
 
@@ -140,7 +156,7 @@ export function ContextOptionsPanel() {
 
       {/* ── Workflow Navigation (bottom-pinned) ────────────────────── */}
       <WorkflowNavigation
-        steps={WORKFLOW_STEP_DEFS}
+        steps={workflowStepDefs}
         currentStep={currentStep}
         completedSteps={completedSteps}
         skippedSteps={skippedSteps}
@@ -150,7 +166,7 @@ export function ContextOptionsPanel() {
         onNext={nextStep}
         onPrev={prevStep}
         onSkip={skipAndAdvance}
-        onGoToStep={goToStep}
+        onGoToStep={handleGoToStep}
         lastStepLabel="Export"
       />
     </div>

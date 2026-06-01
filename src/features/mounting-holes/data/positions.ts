@@ -25,7 +25,7 @@ import {
   bracketInnerX,
   jawBaseH,
 } from '@/features/vise-config/data/presets';
-import { rightJawCenterX } from '@/utils/partGeometry';
+import { leftJawCenterX, rightJawCenterX } from '@/utils/partGeometry';
 import type { ViseConfig, JawBlankConfig, MountingHolesConfig, ProcessedPart } from '@/stores/types';
 
 export interface HolePosition {
@@ -64,10 +64,9 @@ export function computeMountingHolePositions(
   activePart:    ProcessedPart | null,
   profile:       { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
 ): PerSideHoles {
-  const innerX       = bracketInnerX(viseConfig);
-  // Right side tracks the part; left stays at the fixed max-stroke position.
+  // Both sides track the part symmetrically.
+  const xCenterLeft  = leftJawCenterX(viseConfig, jawBlank, activePart, profile);
   const xCenterRight = rightJawCenterX(viseConfig, jawBlank, activePart, profile);
-  const xCenterLeft  = innerX - jawBlank.left.thickness / 2;
   const jawBaseY     = jawBaseH(viseConfig.jawHeight);
   const nominalY     = jawBaseY + mountingHoles.holesHeight;
 

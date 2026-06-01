@@ -170,6 +170,7 @@ function AppToolbar() {
           return (
             <SidebarIcon
               key={stepId}
+              disabled={!gate.allowed}
               icon={
                 <Icon
                   className={`w-4 h-4 ${

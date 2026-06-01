@@ -44,6 +44,7 @@ packages/cad-core/      ← pure algorithms (CSG, geometry math, exporters)
 - [x] **Z-up CAD → Y-up R3F rotation baked into `parseSTL`** — SolidWorks / Fusion / Onshape STLs now land standing correctly. One transform applied at parse time to vertices, normals, and bbox.
 - [x] Drag-and-drop STL upload, binary + ASCII parsers.
 - [x] PivotControls gizmo move/rotate, committed to store on drag end.
+- [x] **Rotation re-seats the part on the rail (no vertical float).** `baseY` (the auto-seat) depends on the part's rotated world height via `computeWorldSpanY`. The gizmo bake-back previously committed `pos.y = worldPos.y − baseY` using the PRE-rotation `baseY`; after the rotation committed, `baseY` recomputed for the new orientation and the part jumped by the half-height delta — floating above the jaws whenever the rotated part got taller (the jaws, tracking `computeWorldSpanX` correctly, stayed put, so the part appeared to detach). Fixed in `PartMeshes.handleTransformChange`: a rotation change resets the manual Y nudge to 0 so the rotated part sits flat on the rail; a pure translate still preserves the Y drag against the current `baseY`.
 - [x] `geometryCache` (module-level Map) for non-serializable Float32Arrays.
 - [x] `removePart` pairs with `geometryCache.delete(id)` — CLAUDE.md Invariant 2 honoured.
 

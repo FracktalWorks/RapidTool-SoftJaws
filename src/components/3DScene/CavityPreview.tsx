@@ -39,7 +39,7 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, rightJawCenterX } from '@/utils/partGeometry';
+import { computeWorldSpanX, leftJawCenterX, rightJawCenterX, leftBracketInnerX, rightBracketInnerX } from '@/utils/partGeometry';
 
 const PREVIEW_COLOR   = '#5cd0ff';
 const PREVIEW_OPACITY = 0.35;
@@ -85,39 +85,39 @@ export function CavityPreview() {
     if (!activePart) return null;
 
     const baseH        = jawBaseH(viseConfig.jawHeight);
-    const innerX       = bracketInnerX(viseConfig);
+
+    const leftInnerXActual = leftBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
 
     // Same source-of-truth math as PartMeshes / JawBlankMesh / useJawProfile.
-    const leftFaceX    = -innerX + jawBlank.left.thickness;          // left jaw inner face
-    const rightCenter  = rightJawCenterX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
-    const rightFaceX   = rightCenter - jawBlank.right.thickness / 2;  // right jaw inner face
+    const leftFaceX    = -leftInnerXActual + jawBlank.left.thickness;          // left jaw inner face
+    const rightFaceX   = rightInnerXActual - jawBlank.right.thickness;  // right jaw inner face
 
     const partSpanX    = computeWorldSpanX(activePart);
     const partHeight   = activePart.boundingBox.max[1] - activePart.boundingBox.min[1];
 
-    // Default snapping point of the part at design-time (matches partSnapX)
-    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
-    const snapX        = leftFaceXDefault + jawBlank.clearance + partSpanX / 2;
-
-    // World coordinates of the part:
-    const partCenterWorldX = snapX + activePart.transform.position.x;
+    // World coordinates of the part (workpiece is snapped/centered at 0):
+    const partCenterWorldX = activePart.transform.position.x;
     const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
     const partRightEdgeX = partCenterWorldX + partSpanX / 2;
 
     const minBackWall = 5.0;
-    const maxLeftDepth = Math.max(1.0, jawBlank.left.thickness - minBackWall);
-    const maxRightDepth = Math.max(1.0, jawBlank.right.thickness - minBackWall);
+    const maxLeftDepth = Math.max(0.0, jawBlank.left.thickness - minBackWall);
+    const maxRightDepth = Math.max(0.0, jawBlank.right.thickness - minBackWall);
 
-    const leftOverlap = parseFloat(Math.max(1.0, Math.min(maxLeftDepth, leftFaceX - partLeftEdgeX)).toFixed(2));
-    const rightOverlap = parseFloat(Math.max(1.0, Math.min(maxRightDepth, partRightEdgeX - rightFaceX)).toFixed(2));
+    // Compute overlaps: physical design-time overlap
+    const rawLeftOverlap = leftFaceX - partLeftEdgeX;
+    const rawRightOverlap = partRightEdgeX - rightFaceX;
+    const leftOverlap = parseFloat(Math.min(maxLeftDepth, Math.max(0.0, rawLeftOverlap)).toFixed(2));
+    const rightOverlap = parseFloat(Math.min(maxRightDepth, Math.max(0.0, rawRightOverlap)).toFixed(2));
 
     // Position each ghost at its actual physical design-time overlap location,
     // keeping the workpiece at full 1:1 scale (no X distortion) so it does
     // not look like it is "dipped into a mold".
     const leftXScale   = 1;
     const rightXScale  = 1;
-    const leftGhostCx  = leftFaceX - leftOverlap + partSpanX / 2;
-    const rightGhostCx = rightFaceX + rightOverlap - partSpanX / 2;
+    const leftGhostCx  = leftFaceX - leftOverlap + partSpanX / 2 + activePart.transform.position.x;
+    const rightGhostCx = rightFaceX + rightOverlap - partSpanX / 2 + activePart.transform.position.x;
 
     // Y/Z: same as PartMeshes — bottom of the part sits on the rail.
     const ghostY = baseH + partHeight / 2 + activePart.transform.position.y;

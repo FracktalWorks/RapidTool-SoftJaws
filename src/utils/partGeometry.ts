@@ -73,17 +73,49 @@ export function computeWorldSpanY(part: ProcessedPart): number {
 }
 
 /**
+ * Left L-bracket inner face X, tracking an imported part.
+ */
+export function leftBracketInnerX(
+  viseConfig: Pick<ViseConfig, 'jawStroke'>,
+  jawBlank:   { left: { thickness: number }; right: { thickness: number } },
+  activePart: ProcessedPart | null,
+  profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  blankClearance: number = 0.1,
+): number {
+  const fixedInnerX = bracketInnerX(viseConfig);
+  if (!activePart) return fixedInnerX;
+  const worldWidth = computeWorldSpanX(activePart);
+
+  if (profile.generated) {
+    return Math.min(
+      fixedInnerX,
+      worldWidth / 2 - (profile.leftDepth - 0.05) + jawBlank.left.thickness
+    );
+  } else {
+    // Design-time: Stationary carriage at default base thickness of 30.0 mm
+    return Math.min(
+      fixedInnerX,
+      worldWidth / 2 + blankClearance + 30.0
+    );
+  }
+}
+
+/**
+ * Left jaw blank's centre X — `leftBracketInnerX − leftThickness/2`.
+ */
+export function leftJawCenterX(
+  viseConfig: Pick<ViseConfig, 'jawStroke'>,
+  jawBlank:   { left: { thickness: number }; right: { thickness: number } },
+  activePart: ProcessedPart | null,
+  profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  blankClearance: number = 0.1,
+): number {
+  return leftBracketInnerX(viseConfig, jawBlank, activePart, profile, blankClearance)
+       - jawBlank.left.thickness / 2;
+}
+
+/**
  * Right L-bracket inner face X, tracking an imported part.
- *
- * When no part is loaded → returns the fixed `bracketInnerX(viseConfig)`
- * (maximum stroke position).
- *
- * When a part is loaded:
- *   - Design-time (generated === false): the right bracket retracts so the
- *     jaw face sits `blankClearance` mm away from the workpiece's right edge.
- *     This prevents visual clipping and simulates the loading gap.
- *   - After profile generation (generated === true): the jaws close onto
- *     the workpiece using the effective overlap (pocket depth − safety).
  */
 export function rightBracketInnerX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
@@ -94,32 +126,24 @@ export function rightBracketInnerX(
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return fixedInnerX;
-  const worldWidth    = computeWorldSpanX(activePart);
-  
+  const worldWidth = computeWorldSpanX(activePart);
+
   if (profile.generated) {
-    // Closed clamping positioning using separate left and right depths
-    const leftOverlap = effectiveOverlap(profile, 'left');
-    const rightOverlap = effectiveOverlap(profile, 'right');
-    const leftFaceX = -fixedInnerX + jawBlank.left.thickness;
-    const partLeftX = leftFaceX - leftOverlap;
-    const partRightX = partLeftX + worldWidth;
-    const rightFaceX = partRightX - rightOverlap;
-    return Math.min(fixedInnerX, rightFaceX + jawBlank.right.thickness);
+    return Math.min(
+      fixedInnerX,
+      worldWidth / 2 - (profile.rightDepth - 0.05) + jawBlank.right.thickness
+    );
   } else {
-    // Design-time: jaws sit CLEAR of the workpiece with blankClearance gap
-    const leftFaceX     = -fixedInnerX + jawBlank.left.thickness;
-    const partLeftEdge  = leftFaceX + blankClearance;
-    const partRightEdge = partLeftEdge + worldWidth;
-    return Math.min(fixedInnerX, partRightEdge + blankClearance + jawBlank.right.thickness);
+    // Design-time: Stationary carriage at default base thickness of 30.0 mm
+    return Math.min(
+      fixedInnerX,
+      worldWidth / 2 + blankClearance + 30.0
+    );
   }
 }
 
 /**
  * Right jaw blank's centre X — `rightBracketInnerX − rightThickness/2`.
- *
- * Used by JawBlankMesh (render position of the right blank) AND by
- * useJawProfile (where to bake the CSG blank). Single source of truth →
- * the rendered jaw and the cut profile can never drift apart.
  */
 export function rightJawCenterX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
@@ -133,13 +157,9 @@ export function rightJawCenterX(
 }
 
 /**
- * Centralized part snap X helper. Calculates the workpiece center coordinate
- * based on the left jaw face position and the blank clearance.
+ * Centralized part snap X helper. Calculates the workpiece center coordinate.
  *
- * Design-time: part left edge = leftFaceX + blankClearance (part sits 0.1mm
- * away from the left jaw face). Part center = partLeftEdge + worldWidth/2.
- *
- * Post-generation: part nests into the left jaw by the effective overlap.
+ * In this design, the workpiece center is locked at X = 0.
  */
 export function partSnapX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
@@ -148,45 +168,7 @@ export function partSnapX(
   profile: { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
   blankClearance: number = 0.1,
 ): number {
-  const fixedInnerX = bracketInnerX(viseConfig);
-  if (!activePart) return 0;
-  const worldWidth = computeWorldSpanX(activePart);
-  
-  if (profile.generated) {
-    const leftOverlap = effectiveOverlap(profile, 'left');
-    const leftFaceX = -fixedInnerX + leftThickness;
-    return leftFaceX - leftOverlap + worldWidth / 2;
-  } else {
-    // Design-time: part left edge sits blankClearance away from left jaw face
-    const leftFaceX = -fixedInnerX + leftThickness;
-    return leftFaceX + blankClearance + worldWidth / 2;
-  }
-}
-
-/**
- * Effective overlap for RENDER-TIME positioning when the vise is "closed".
- *
- * After the CSG runs (`profile.generated === true`) the user expects the
- * physical-vise grip behaviour: jaws close on the workpiece so each side of
- * the part nests `(depth − safety) mm` into its corresponding pocket. We
- * achieve this by replacing the design overlap (e.g. 5mm) with a closing
- * overlap of `depth − safety` in every render-time calculation.
- *
- * IMPORTANT: this is RENDER-ONLY. The CSG pipeline (`useJawProfile`) MUST
- * always use the DESIGN overlap so the baked cavity matches the workpiece
- * silhouette as it was when "Generate Profile" was clicked.
- */
-const POST_CLAMP_SAFETY_MM = 0.05;
-
-export function effectiveOverlap(
-  profile: { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
-  side: 'left' | 'right',
-): number {
-  const depth = side === 'left' ? profile.leftDepth : profile.rightDepth;
-  if (profile.generated && depth > POST_CLAMP_SAFETY_MM) {
-    return depth - POST_CLAMP_SAFETY_MM;
-  }
-  return profile.generated ? depth : profile.depth;
+  return 0;
 }
 
 /** Rail gap constant — workpiece floats this far above the jaw rail. */

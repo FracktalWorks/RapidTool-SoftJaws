@@ -31,7 +31,7 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, rightJawCenterX, rightBracketInnerX, RAIL_GAP_MM } from '@/utils/partGeometry';
+import { computeWorldSpanX, leftJawCenterX, rightJawCenterX, leftBracketInnerX, rightBracketInnerX, RAIL_GAP_MM } from '@/utils/partGeometry';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -177,49 +177,43 @@ export function useJawProfile(): UseJawProfileReturn {
       return;
     }
 
-    if (jawProfile.depth <= 0) {
-      setError('Pocket depth must be greater than 0.');
-      setStatus('error');
-      return;
-    }
-
-    const minThickness = Math.min(jawBlank.left.thickness, jawBlank.right.thickness);
-    if (jawProfile.depth >= minThickness) {
-      setError(`Pocket depth (${jawProfile.depth} mm) must be less than jaw thickness (${minThickness} mm).`);
-      setStatus('error');
-      return;
-    }
-
     // ── Geometry layout ─────────────────────────────────────────────────────
     const baseH      = jawBaseH(viseConfig.jawHeight);
-    const innerX     = bracketInnerX(viseConfig);
 
-    // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
-    const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
+    const leftInnerXActual = leftBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
+
+    // ── Jaw blank X positions — shared with JawBlankMesh via leftJawCenterX & rightJawCenterX
+    const leftXCenter  = -leftJawCenterX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
     const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
     
-    const leftFaceXActual = -innerX + jawBlank.left.thickness;
-    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
+    const leftFaceXActual = -leftInnerXActual + jawBlank.left.thickness;
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
     const partSpanX    = computeWorldSpanX(part);
     
-    // Default snapping point of the part at design-time (matches partSnapX)
-    const leftFaceXDefault = -innerX + jawBlank.left.thickness;
-    const snapX        = leftFaceXDefault + jawBlank.clearance + partSpanX / 2;
-    
-    // Word coordinates of the part:
-    const partCenterWorldX = snapX + part.transform.position.x;
+    // Word coordinates of the part (workpiece is snapped/centered at 0):
+    const partCenterWorldX = part.transform.position.x;
     const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
     const partRightEdgeX = partCenterWorldX + partSpanX / 2;
 
     // Calculate actual physical overlaps at design time
     const minBackWall = 5.0;
-    const maxLeftDepth = Math.max(1.0, jawBlank.left.thickness - minBackWall);
-    const maxRightDepth = Math.max(1.0, jawBlank.right.thickness - minBackWall);
+    const maxLeftDepth = Math.max(0.0, jawBlank.left.thickness - minBackWall);
+    const maxRightDepth = Math.max(0.0, jawBlank.right.thickness - minBackWall);
     
-    const leftOverlap = parseFloat(Math.max(1.0, Math.min(maxLeftDepth, leftFaceXActual - partLeftEdgeX)).toFixed(2));
-    const rightOverlap = parseFloat(Math.max(1.0, Math.min(maxRightDepth, partRightEdgeX - rightFaceXActual)).toFixed(2));
+    // Compute physical overlaps: how much the jaw blank extends over/into the workpiece
+    const rawLeftOverlap = leftFaceXActual - partLeftEdgeX;
+    const rawRightOverlap = partRightEdgeX - rightFaceXActual;
+    const leftOverlap = parseFloat(Math.min(maxLeftDepth, Math.max(0.0, rawLeftOverlap)).toFixed(2));
+    const rightOverlap = parseFloat(Math.min(maxRightDepth, Math.max(0.0, rawRightOverlap)).toFixed(2));
+
+    // Validate that at least one side has an overlap > 1.0 mm
+    if (leftOverlap <= 1.0 && rightOverlap <= 1.0) {
+      setError('At least one jaw must overlap the workpiece by more than 1.0 mm. Increase jaw thickness ("Length X") to overlap the part.');
+      setStatus('error');
+      return;
+    }
 
     // ── Build left & right blanks ────────────────────────────────────────────
     const getBaseGeo = (cacheKey: string, xCenter: number, side: 'left' | 'right') => {
@@ -255,21 +249,10 @@ export function useJawProfile(): UseJawProfileReturn {
     const leftGeo  = getBaseGeo(JAW_HOLED_CACHE_KEY_LEFT, leftXCenter, 'left');
     const rightGeo = getBaseGeo(JAW_HOLED_CACHE_KEY_RIGHT, rightXCenter, 'right');
 
-    // The worker positions the part at `partHeight/2 + transform.y`, which
-    // would land it with its bottom at world Y = 0. The scene's PartMeshes
-    // sits the part on the RAIL (Y = jawBaseH). Without this correction the
-    // CSG sweep and the blank only partially overlap on Y, producing
-    // degenerate slivers + inverted normals (the "black artifact" mess).
-    // Push the rail offset into transform.position.y so the worker lands
-    // the part at the same world Y the scene shows.
-    const partTransformForCsg = {
-      position: {
-        x: partCenterWorldX,
-        y: baseH + RAIL_GAP_MM + part.transform.position.y,
-        z: part.transform.position.z,
-      },
-      rotation: part.transform.rotation,
-    };
+    // To simulate the closed/cutting state in CSG, the workpiece must be positioned
+    // at the corresponding closed/overlap coordinate for each side.
+    const partCenterWorldX_left = leftFaceXActual - leftOverlap + partSpanX / 2 + part.transform.position.x;
+    const partCenterWorldX_right = rightFaceXActual + rightOverlap - partSpanX / 2 + part.transform.position.x;
 
     if (!leftGeo.getAttribute('position')) {
       throw new Error('leftGeo position attribute is missing!');
@@ -288,6 +271,7 @@ export function useJawProfile(): UseJawProfileReturn {
       geo: THREE.BufferGeometry,
       removalDir: [number, number, number],
       sideDepth: number,
+      partCenterX: number,
     ): import('../worker/profileWorker').ProfileWorkerInput => ({
       id:              partId,
       blankPositions:  geo.getAttribute('position').array as Float32Array,
@@ -296,7 +280,14 @@ export function useJawProfile(): UseJawProfileReturn {
       partPositions:   cachedGeo.positions,
       partNormals:     cachedGeo.normals,
       partIndices:     cachedGeo.indices,
-      partTransform:   partTransformForCsg,
+      partTransform:   {
+        position: {
+          x: partCenterX,
+          y: baseH + RAIL_GAP_MM + part.transform.position.y,
+          z: part.transform.position.z,
+        },
+        rotation: part.transform.rotation,
+      },
       partBoundingBox: part.boundingBox,
       removalDir,
       depth:           sideDepth,
@@ -304,11 +295,31 @@ export function useJawProfile(): UseJawProfileReturn {
     });
 
     try {
-      // Run both sides in parallel — each worker is independent.
-      const [leftRes, rightRes] = await Promise.all([
-        runCsgWorker(makePayload(leftGeo,  [-1, 0, 0], leftOverlap)),
-        runCsgWorker(makePayload(rightGeo, [+1, 0, 0], rightOverlap)),
-      ]);
+      let leftRes: import('../worker/profileWorker').ProfileWorkerOutput;
+      if (leftOverlap > 1.0) {
+        leftRes = await runCsgWorker(makePayload(leftGeo, [-1, 0, 0], leftOverlap, partCenterWorldX_left));
+      } else {
+        leftRes = {
+          id: partId,
+          success: true,
+          positions: (leftGeo.getAttribute('position').array as Float32Array).slice(),
+          normals: (leftGeo.getAttribute('normal').array as Float32Array).slice(),
+          indices: leftGeo.index ? (leftGeo.index.array as Uint32Array).slice() : undefined,
+        };
+      }
+
+      let rightRes: import('../worker/profileWorker').ProfileWorkerOutput;
+      if (rightOverlap > 1.0) {
+        rightRes = await runCsgWorker(makePayload(rightGeo, [+1, 0, 0], rightOverlap, partCenterWorldX_right));
+      } else {
+        rightRes = {
+          id: partId,
+          success: true,
+          positions: (rightGeo.getAttribute('position').array as Float32Array).slice(),
+          normals: (rightGeo.getAttribute('normal').array as Float32Array).slice(),
+          indices: rightGeo.index ? (rightGeo.index.array as Uint32Array).slice() : undefined,
+        };
+      }
 
       leftGeo.dispose();
       rightGeo.dispose();
@@ -347,7 +358,7 @@ export function useJawProfile(): UseJawProfileReturn {
       if (!leftIsCut && !rightIsCut) {
         throw new Error(
           'CSG produced an empty cut — the part does not overlap either jaw blank clamping zone. ' +
-          'Check that the part is positioned between the jaws and that pocket depth is > 0.',
+          'Check that the part is positioned between the jaws and that jaw thickness is large enough to overlap the part.',
         );
       }
 

@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { computeViseGeometry, bracketInnerX } from '@/features/vise-config/data/presets';
-import { rightBracketInnerX } from '@/utils/partGeometry';
+import { leftBracketInnerX, rightBracketInnerX } from '@/utils/partGeometry';
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 
@@ -137,7 +137,10 @@ export function ViseModel() {
   });
   const d = useMemo(() => computeViseGeometry(viseConfig), [viseConfig]);
 
-  const leftInnerX = bracketInnerX(viseConfig);
+  const leftInnerX = useMemo(
+    () => leftBracketInnerX(viseConfig, jawBlank, activePart, jawProfile),
+    [viseConfig, jawBlank, activePart, jawProfile],
+  );
   const rightInnerX = useMemo(
     () => rightBracketInnerX(viseConfig, jawBlank, activePart, jawProfile),
     [viseConfig, jawBlank, activePart, jawProfile],
