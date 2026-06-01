@@ -335,7 +335,10 @@ export async function repairMeshWithManifold(
     await yieldToUI();
     
     const positionAttr = geometry.getAttribute('position');
-    const originalTriangles = positionAttr.count / 3;
+    // For indexed geometry use index count; for non-indexed, position count / 3
+    const originalTriangles = geometry.index
+      ? geometry.index.count / 3
+      : positionAttr.count / 3;
     
     // Convert to Manifold Mesh format
     const mesh = threeGeometryToManifoldMesh(geometry, wasm);
@@ -353,9 +356,13 @@ export async function repairMeshWithManifold(
       manifold = new Manifold(mesh);
       
       const status = manifold.status();
-      if (status !== 0) { // 0 = NoError
-        wasRepaired = true;
-        actions.push('Manifold attempted automatic repair');
+      // status === 0 means NoError (mesh was already valid or was repaired cleanly).
+      // status !== 0 indicates a manifold error — mesh could not be fully repaired.
+      if (status !== 0) {
+        actions.push(`Manifold repair warning: status code ${status}`);
+      } else {
+        wasRepaired = true; // Manifold accepted and potentially normalized the mesh
+        actions.push('Manifold conversion successful');
       }
       
       // Check if manifold is empty (failed)
@@ -450,7 +457,10 @@ export async function decimateMeshWithManifold(
     await yieldToUI();
     
     const positionAttr = geometry.getAttribute('position');
-    const originalTriangles = positionAttr.count / 3;
+    // Use index count for indexed geometry, else position count / 3
+    const originalTriangles = geometry.index
+      ? geometry.index.count / 3
+      : positionAttr.count / 3;
     
     // Skip if already below target (unless force is true)
     if (originalTriangles <= targetTriangles && !force) {
@@ -601,7 +611,10 @@ export async function repairAndDecimateMesh(
   const actions: string[] = [];
   
   const positionAttr = geometry.getAttribute('position');
-  const originalTriangles = positionAttr.count / 3;
+  // Use index count for indexed geometry, else position count / 3
+  const originalTriangles = geometry.index
+    ? geometry.index.count / 3
+    : positionAttr.count / 3;
   
   let currentGeometry = geometry;
   let wasRepaired = false;
@@ -965,7 +978,10 @@ export async function repairMeshForExport(
   const repairSteps: string[] = [];
   
   const positionAttr = geometry.getAttribute('position');
-  const originalTriangles = positionAttr ? positionAttr.count / 3 : 0;
+  // Use index count for indexed geometry, else position count / 3
+  const originalTriangles = positionAttr
+    ? (geometry.index ? geometry.index.count / 3 : positionAttr.count / 3)
+    : 0;
   
   try {
     onProgress?.({ stage: 'initializing', progress: 0, message: 'Starting mesh repair...' });

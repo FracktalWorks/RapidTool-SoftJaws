@@ -139,21 +139,39 @@ export function JawBlankStepContent() {
         )}
       </div>
 
+      {/* Blank Clearance */}
+      <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          Blank Clearance
+        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-xs font-medium text-foreground">Loading Gap</span>
+            <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed">
+              Air gap between each jaw blank face and the workpiece for loading/centering.
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={0}
+              max={5}
+              step={0.05}
+              value={jawBlank.clearance ?? 0.1}
+              onChange={(e) => updateJawBlank({ clearance: parseFloat(e.target.value) || 0 })}
+              className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+            />
+            <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+          </div>
+        </div>
+      </div>
+
       {/* Jaw Blank Dimensions */}
       <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
             Blank Dimensions
           </p>
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer font-tech select-none">
-            <input
-              type="checkbox"
-              checked={jawBlank.linkJaws}
-              onChange={(e) => updateJawBlank({ linkJaws: e.target.checked })}
-              className="w-3.5 h-3.5 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer"
-            />
-            Link jaws
-          </label>
         </div>
 
         {/* Face overhang warning */}
@@ -182,8 +200,9 @@ export function JawBlankStepContent() {
                     <span className={`text-xs font-medium ${AXIS_TEXT_CLASS[axis]}`}>{label}</span>
                     <span className="ml-2 text-[9px] text-muted-foreground/60 font-tech">{trinckleLabel}</span>
                   </div>
-                  {jawBlank.linkJaws ? (
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 border border-input/60 bg-background/50 rounded px-1 hover:bg-background focus-within:ring-1 focus-within:ring-primary/40">
+                      <span className="text-[9px] text-muted-foreground/60 font-tech select-none">L</span>
                       <input
                         type="number"
                         min={min}
@@ -193,43 +212,25 @@ export function JawBlankStepContent() {
                         onChange={(e) => updateJawBlank({ left: { [field]: parseFloat(e.target.value) || 0 } })}
                         onFocus={handleEnter}
                         onBlur={clearHover}
-                        className={`w-28 rounded border px-2 py-1 text-right text-xs font-tech outline-none tech-transition hover:bg-background focus:ring-1 focus:ring-primary/40 ${isMaxed ? 'border-amber-500/50 bg-amber-500/5' : 'border-input/60 bg-background/50'}`}
+                        className="w-11 border-none bg-transparent py-1 text-right text-xs font-tech outline-none"
                       />
-                      <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center gap-1 border border-input/60 bg-background/50 rounded px-1 hover:bg-background focus-within:ring-1 focus-within:ring-primary/40">
-                        <span className="text-[9px] text-muted-foreground/60 font-tech select-none">L</span>
-                        <input
-                          type="number"
-                          min={min}
-                          max={max}
-                          step={0.5}
-                          value={jawBlank.left[field]}
-                          onChange={(e) => updateJawBlank({ left: { [field]: parseFloat(e.target.value) || 0 } })}
-                          onFocus={handleEnter}
-                          onBlur={clearHover}
-                          className="w-11 border-none bg-transparent py-1 text-right text-xs font-tech outline-none"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1 border border-input/60 bg-background/50 rounded px-1 hover:bg-background focus-within:ring-1 focus-within:ring-primary/40">
-                        <span className="text-[9px] text-muted-foreground/60 font-tech select-none">R</span>
-                        <input
-                          type="number"
-                          min={min}
-                          max={max}
-                          step={0.5}
-                          value={jawBlank.right[field]}
-                          onChange={(e) => updateJawBlank({ right: { [field]: parseFloat(e.target.value) || 0 } })}
-                          onFocus={handleEnter}
-                          onBlur={clearHover}
-                          className="w-11 border-none bg-transparent py-1 text-right text-xs font-tech outline-none"
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+                    <div className="flex items-center gap-1 border border-input/60 bg-background/50 rounded px-1 hover:bg-background focus-within:ring-1 focus-within:ring-primary/40">
+                      <span className="text-[9px] text-muted-foreground/60 font-tech select-none">R</span>
+                      <input
+                        type="number"
+                        min={min}
+                        max={max}
+                        step={0.5}
+                        value={jawBlank.right[field]}
+                        onChange={(e) => updateJawBlank({ right: { [field]: parseFloat(e.target.value) || 0 } })}
+                        onFocus={handleEnter}
+                        onBlur={clearHover}
+                        className="w-11 border-none bg-transparent py-1 text-right text-xs font-tech outline-none"
+                      />
                     </div>
-                  )}
+                    <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+                  </div>
                 </div>
                 <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed pl-0.5">
                   {hint}
@@ -243,10 +244,10 @@ export function JawBlankStepContent() {
         </div>
       </div>
 
-      {/* Interface (Mounting Holes) */}
+      {/* Hole Interface (Mounting Holes) */}
       <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
         <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-          Interface
+          Hole Interface
         </p>
 
         <div className="grid gap-3">
@@ -393,9 +394,7 @@ export function JawBlankStepContent() {
           <div className="flex justify-between items-center text-xs pt-2 border-t border-border/30">
             <span className="text-muted-foreground">Calculated screw length</span>
             <span className="font-semibold font-tech text-foreground pr-5">
-              {jawBlank.linkJaws
-                ? `${leftCalculatedScrewLength.toFixed(1)} mm`
-                : `L: ${leftCalculatedScrewLength.toFixed(1)} / R: ${rightCalculatedScrewLength.toFixed(1)} mm`}
+              {`L: ${leftCalculatedScrewLength.toFixed(1)} / R: ${rightCalculatedScrewLength.toFixed(1)} mm`}
             </span>
           </div>
         </div>

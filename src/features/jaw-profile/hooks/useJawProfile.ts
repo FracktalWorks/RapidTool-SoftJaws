@@ -31,7 +31,7 @@ import {
   jawBaseH,
   bracketInnerX,
 } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, rightJawCenterX, rightBracketInnerX } from '@/utils/partGeometry';
+import { computeWorldSpanX, rightJawCenterX, rightBracketInnerX, RAIL_GAP_MM } from '@/utils/partGeometry';
 
 export type JawProfileStatus = 'idle' | 'running' | 'success' | 'error';
 
@@ -196,17 +196,17 @@ export function useJawProfile(): UseJawProfileReturn {
 
     // ── Jaw blank X positions — shared with JawBlankMesh via rightJawCenterX
     const leftXCenter  = -(innerX - jawBlank.left.thickness / 2);
-    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, { ...jawProfile, generated: false });
+    const rightXCenter = rightJawCenterX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
     
     const leftFaceXActual = -innerX + jawBlank.left.thickness;
-    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false });
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, part, { ...jawProfile, generated: false }, jawBlank.clearance);
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
     const partSpanX    = computeWorldSpanX(part);
     
-    // Default snapping point of the part at design-time
+    // Default snapping point of the part at design-time (matches partSnapX)
     const leftFaceXDefault = -innerX + jawBlank.left.thickness;
-    const snapX        = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
+    const snapX        = leftFaceXDefault + jawBlank.clearance + partSpanX / 2;
     
     // Word coordinates of the part:
     const partCenterWorldX = snapX + part.transform.position.x;
@@ -265,11 +265,24 @@ export function useJawProfile(): UseJawProfileReturn {
     const partTransformForCsg = {
       position: {
         x: partCenterWorldX,
-        y: baseH + part.transform.position.y,
+        y: baseH + RAIL_GAP_MM + part.transform.position.y,
         z: part.transform.position.z,
       },
       rotation: part.transform.rotation,
     };
+
+    if (!leftGeo.getAttribute('position')) {
+      throw new Error('leftGeo position attribute is missing!');
+    }
+    if (!leftGeo.getAttribute('normal')) {
+      throw new Error('leftGeo normal attribute is missing!');
+    }
+    if (!rightGeo.getAttribute('position')) {
+      throw new Error('rightGeo position attribute is missing!');
+    }
+    if (!rightGeo.getAttribute('normal')) {
+      throw new Error('rightGeo normal attribute is missing!');
+    }
 
     const makePayload = (
       geo: THREE.BufferGeometry,
@@ -287,7 +300,7 @@ export function useJawProfile(): UseJawProfileReturn {
       partBoundingBox: part.boundingBox,
       removalDir,
       depth:           sideDepth,
-      offset:          jawProfile.clearance,
+      offset:          jawProfile.tolerance,
     });
 
     try {
@@ -355,12 +368,12 @@ export function useJawProfile(): UseJawProfileReturn {
         leftDepth: leftOverlap,
         rightDepth: rightOverlap,
         generated: true,
-        showWorkpiece: true,
-        ghostWorkpiece: true,
+        hideModel: false,
       });
       setFaceCount(leftFaceCount + rightFaceCount);
       setStatus('success');
     } catch (err) {
+      console.error('[useJawProfile] generate failed:', err);
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }

@@ -117,7 +117,7 @@ function resolve(
         boxDims,
         axis: 'x', // highlight color will default to X (red/cyan) or we override
         arrowR3F: 'x',
-        value: jawProfile.clearance,
+        value: jawBlank.clearance,
         label: 'Clearance',
         material: JAW_MATERIAL,
       };
@@ -541,9 +541,10 @@ function HolesPreviewDiagram({ field, mountingHoles }: HolesPreviewDiagramProps)
 interface ProfilePreviewDiagramProps {
   field: string;
   jawProfile: ReturnType<typeof useSoftJawsStore.getState>['jawProfile'];
+  clearance: number;
 }
 
-function ProfilePreviewDiagram({ field, jawProfile }: ProfilePreviewDiagramProps) {
+function ProfilePreviewDiagram({ field, jawProfile, clearance }: ProfilePreviewDiagramProps) {
   const highlightColor = '#0ea5e9'; // sky-500
   const isClearance = field === 'clearance';
   const isDepth = field === 'depth';
@@ -657,7 +658,7 @@ function ProfilePreviewDiagram({ field, jawProfile }: ProfilePreviewDiagramProps
           textAnchor="start"
           fontWeight="bold"
         >
-          Clearance (C): {jawProfile.clearance.toFixed(2)} mm
+          Clearance (C): {clearance.toFixed(2)} mm
         </text>
       </g>
 
@@ -729,7 +730,7 @@ export function DesignBlockPreview() {
           {isHolesScope ? (
             <HolesPreviewDiagram field={hovered.field} mountingHoles={mountingHoles} />
           ) : isProfileScope ? (
-            <ProfilePreviewDiagram field={hovered.field} jawProfile={jawProfile} />
+            <ProfilePreviewDiagram field={hovered.field} jawProfile={jawProfile} clearance={jawBlank.clearance} />
           ) : (
             <Canvas gl={{ antialias: true, alpha: true }}>
               <FramedCamera maxDim={maxDim} />

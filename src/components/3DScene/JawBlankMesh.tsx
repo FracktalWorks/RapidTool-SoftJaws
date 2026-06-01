@@ -104,7 +104,7 @@ export function JawBlankMesh() {
   const baseY = useMemo(() => jawBaseH(viseConfig.jawHeight), [viseConfig.jawHeight]);
   const innerX = useMemo(() => bracketInnerX(viseConfig), [viseConfig]);
   const leftXOff = useMemo(() => innerX - jawBlank.left.thickness / 2, [innerX, jawBlank.left.thickness]);
-  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile), [viseConfig, jawBlank, activePart, jawProfile]);
+  const rightXOff = useMemo(() => rightJawCenterX(viseConfig, jawBlank, activePart, jawProfile, jawBlank.clearance), [viseConfig, jawBlank, activePart, jawProfile]);
 
   const leftCenterY = useMemo(() => baseY + jawBlank.left.height / 2, [baseY, jawBlank.left.height]);
   const rightCenterY = useMemo(() => baseY + jawBlank.right.height / 2, [baseY, jawBlank.right.height]);
@@ -196,8 +196,6 @@ export function JawBlankMesh() {
     const scaleX = newThickness / dragStartThickness.current;
     const actualDeltaT = newThickness - dragStartThickness.current;
 
-    const linkJaws = useSoftJawsStore.getState().jawBlank.linkJaws;
-
     const updateMesh = (
       mesh: THREE.Mesh | null,
       labelGroup: THREE.Group | null,
@@ -223,20 +221,13 @@ export function JawBlankMesh() {
 
     if (activeGizmoSide === -1) {
       updateMesh(leftMeshRef.current, leftLabelGroupRef.current, dragStartLeftX.current, -1);
-      if (linkJaws) {
-        updateMesh(rightMeshRef.current, rightLabelGroupRef.current, dragStartRightX.current, 1);
-      }
     } else {
       updateMesh(rightMeshRef.current, rightLabelGroupRef.current, dragStartRightX.current, 1);
-      if (linkJaws) {
-        updateMesh(leftMeshRef.current, leftLabelGroupRef.current, dragStartLeftX.current, -1);
-      }
     }
   }, [activeGizmoSide]);
 
   const handleDragEnd = useCallback(() => {
     const side = activeGizmoSide === -1 ? 'left' : 'right';
-    const linkJaws = useSoftJawsStore.getState().jawBlank.linkJaws;
 
     let finalHeight = dragStartHeight.current;
     let finalThickness = dragStartThickness.current;
@@ -279,12 +270,7 @@ export function JawBlankMesh() {
       thickness: parseFloat(finalThickness.toFixed(1)),
     };
 
-    if (linkJaws) {
-      updates.left = value;
-      updates.right = value;
-    } else {
-      updates[side] = value;
-    }
+    updates[side] = value;
     updates.isDragging = false;
 
     useSoftJawsStore.getState().updateJawBlank(updates);

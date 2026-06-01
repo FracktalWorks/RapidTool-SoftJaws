@@ -40,24 +40,57 @@ export function computeWorldSpanX(part: ProcessedPart): number {
 }
 
 /**
+ * computeWorldSpanY — world-space Y extent of a part after applying rotation.
+ *
+ * Uses the same OBB→AABB half-extent formula as computeWorldSpanX but
+ * projects onto the world Y axis (rotation matrix second row).
+ *
+ * Used for rotation-aware vertical positioning so that rotating a tall
+ * part (e.g. 90° Z) correctly recalculates the world-space height.
+ */
+export function computeWorldSpanY(part: ProcessedPart): number {
+  const { min, max } = part.boundingBox;
+  const rot = part.transform.rotation;
+
+  const hw = (max[0] - min[0]) / 2;
+  const hh = (max[1] - min[1]) / 2;
+  const hd = (max[2] - min[2]) / 2;
+
+  // Fast path — no rotation
+  if (rot.x === 0 && rot.y === 0 && rot.z === 0) {
+    return hh * 2;
+  }
+
+  // THREE.Matrix4.elements is column-major:
+  //   m[1]=R10, m[5]=R11, m[9]=R12 (second row — projects onto world Y)
+  const m = new THREE.Matrix4()
+    .makeRotationFromEuler(
+      new THREE.Euler(rot.x * DEG2RAD, rot.y * DEG2RAD, rot.z * DEG2RAD, 'XYZ'),
+    )
+    .elements;
+
+  return (Math.abs(m[1]) * hw + Math.abs(m[5]) * hh + Math.abs(m[9]) * hd) * 2;
+}
+
+/**
  * Right L-bracket inner face X, tracking an imported part.
  *
  * When no part is loaded → returns the fixed `bracketInnerX(viseConfig)`
  * (maximum stroke position).
  *
- * When a part is loaded → the right bracket carriage moves inward to clamp
- * the part's right edge plus `rightThickness` of jaw stock, taking into account
- * the physical jaw overlap.
- *
- * Single source of truth shared by ViseModel (renders the moved bracket),
- * PillarBoltDecals (renders bolt-exit decals on the moved bracket's back
- * face), and any future consumer that needs the right bracket position.
+ * When a part is loaded:
+ *   - Design-time (generated === false): the right bracket retracts so the
+ *     jaw face sits `blankClearance` mm away from the workpiece's right edge.
+ *     This prevents visual clipping and simulates the loading gap.
+ *   - After profile generation (generated === true): the jaws close onto
+ *     the workpiece using the effective overlap (pocket depth − safety).
  */
 export function rightBracketInnerX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
   profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  blankClearance: number = 0.1,
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return fixedInnerX;
@@ -73,10 +106,11 @@ export function rightBracketInnerX(
     const rightFaceX = partRightX - rightOverlap;
     return Math.min(fixedInnerX, rightFaceX + jawBlank.right.thickness);
   } else {
-    // Design-time positioning using actual thicknesses and target depth
+    // Design-time: jaws sit CLEAR of the workpiece with blankClearance gap
     const leftFaceX     = -fixedInnerX + jawBlank.left.thickness;
-    const partRightEdge = leftFaceX - profile.depth + worldWidth;
-    return Math.min(fixedInnerX, partRightEdge - profile.depth + jawBlank.right.thickness);
+    const partLeftEdge  = leftFaceX + blankClearance;
+    const partRightEdge = partLeftEdge + worldWidth;
+    return Math.min(fixedInnerX, partRightEdge + blankClearance + jawBlank.right.thickness);
   }
 }
 
@@ -92,20 +126,27 @@ export function rightJawCenterX(
   jawBlank:   { left: { thickness: number }; right: { thickness: number } },
   activePart: ProcessedPart | null,
   profile:    { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  blankClearance: number = 0.1,
 ): number {
-  return rightBracketInnerX(viseConfig, jawBlank, activePart, profile)
+  return rightBracketInnerX(viseConfig, jawBlank, activePart, profile, blankClearance)
        - jawBlank.right.thickness / 2;
 }
 
 /**
  * Centralized part snap X helper. Calculates the workpiece center coordinate
- * based on the left jaw face position and the physical overlap.
+ * based on the left jaw face position and the blank clearance.
+ *
+ * Design-time: part left edge = leftFaceX + blankClearance (part sits 0.1mm
+ * away from the left jaw face). Part center = partLeftEdge + worldWidth/2.
+ *
+ * Post-generation: part nests into the left jaw by the effective overlap.
  */
 export function partSnapX(
   viseConfig: Pick<ViseConfig, 'jawStroke'>,
   leftThickness: number,
   activePart: ProcessedPart | null,
   profile: { generated: boolean; depth: number; leftDepth: number; rightDepth: number },
+  blankClearance: number = 0.1,
 ): number {
   const fixedInnerX = bracketInnerX(viseConfig);
   if (!activePart) return 0;
@@ -116,8 +157,9 @@ export function partSnapX(
     const leftFaceX = -fixedInnerX + leftThickness;
     return leftFaceX - leftOverlap + worldWidth / 2;
   } else {
+    // Design-time: part left edge sits blankClearance away from left jaw face
     const leftFaceX = -fixedInnerX + leftThickness;
-    return leftFaceX - profile.depth + worldWidth / 2;
+    return leftFaceX + blankClearance + worldWidth / 2;
   }
 }
 
@@ -146,3 +188,6 @@ export function effectiveOverlap(
   }
   return profile.generated ? depth : profile.depth;
 }
+
+/** Rail gap constant — workpiece floats this far above the jaw rail. */
+export const RAIL_GAP_MM = 0.2;

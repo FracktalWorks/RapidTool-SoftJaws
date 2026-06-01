@@ -274,29 +274,18 @@ export function PropertiesPanel() {
         <AccordionContent className="px-4">
           <div className="space-y-2 py-1">
             <PropRow label="Material"  value={jawBlank.material} />
+            <PropRow label="Clearance" value={`${jawBlank.clearance} mm`} />
             <PropRow
               label="Face (Z)"
-              value={
-                jawBlank.linkJaws
-                  ? `${jawBlank.left.face} mm`
-                  : `L: ${jawBlank.left.face} / R: ${jawBlank.right.face} mm`
-              }
+              value={`L: ${jawBlank.left.face} / R: ${jawBlank.right.face} mm`}
             />
             <PropRow
               label="Height (Y)"
-              value={
-                jawBlank.linkJaws
-                  ? `${jawBlank.left.height} mm`
-                  : `L: ${jawBlank.left.height} / R: ${jawBlank.right.height} mm`
-              }
+              value={`L: ${jawBlank.left.height} / R: ${jawBlank.right.height} mm`}
             />
             <PropRow
               label="Thickness (X)"
-              value={
-                jawBlank.linkJaws
-                  ? `${jawBlank.left.thickness} mm`
-                  : `L: ${jawBlank.left.thickness} / R: ${jawBlank.right.thickness} mm`
-              }
+              value={`L: ${jawBlank.left.thickness} / R: ${jawBlank.right.thickness} mm`}
             />
           </div>
         </AccordionContent>
@@ -312,9 +301,8 @@ export function PropertiesPanel() {
         </AccordionTrigger>
         <AccordionContent className="px-4">
           <div className="space-y-2 py-1">
-            <PropRow label="Clearance" value={`${jawProfile.clearance} mm`} />
-            <PropRow label="Depth"     value={`${jawProfile.depth} mm`} />
-            <PropRow label="Status"    value={jawProfile.generated ? 'Generated' : 'Pending'} />
+            <PropRow label="Depth"  value={`${jawProfile.depth} mm`} />
+            <PropRow label="Status" value={jawProfile.generated ? 'Generated' : 'Pending'} />
           </div>
         </AccordionContent>
       </AccordionItem>

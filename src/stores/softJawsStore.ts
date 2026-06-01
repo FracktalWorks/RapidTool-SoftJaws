@@ -56,18 +56,17 @@ const INITIAL_STATE: SoftJawsState = {
   jawBlank: {
     left: { face: 150.0, height: 65.0, thickness: 30.0 },
     right: { face: 150.0, height: 65.0, thickness: 30.0 },
-    linkJaws: true,
     material: 'aluminum-6061',
+    clearance: 0.1,
     isDragging: false,
   },
   jawProfile: {
-    clearance: 0.1,
     depth: 5.0,
     leftDepth: 5.0,
     rightDepth: 5.0,
     generated: false,
-    showWorkpiece: true,
-    ghostWorkpiece: false,
+    hideModel: false,
+    tolerance: 0.2,
   },
   gripFeatures: {
     pattern: 'none',
@@ -182,14 +181,14 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
 
       updateJawBlank: (config) =>
         set((state) => {
-          if (config.linkJaws !== undefined) {
-            state.jawBlank.linkJaws = config.linkJaws;
-            if (config.linkJaws) {
-              state.jawBlank.right = { ...state.jawBlank.left };
-            }
-          }
           if (config.material !== undefined) {
             state.jawBlank.material = config.material;
+          }
+          if (config.clearance !== undefined) {
+            if (state.jawBlank.clearance !== config.clearance) {
+              state.jawBlank.clearance = config.clearance;
+              state.jawProfile.generated = false;
+            }
           }
           if (config.isDragging !== undefined) {
             state.jawBlank.isDragging = config.isDragging;
@@ -197,16 +196,10 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
 
           if (config.left !== undefined) {
             Object.assign(state.jawBlank.left, config.left);
-            if (state.jawBlank.linkJaws) {
-              state.jawBlank.right = { ...state.jawBlank.left };
-            }
           }
 
           if (config.right !== undefined) {
             Object.assign(state.jawBlank.right, config.right);
-            if (state.jawBlank.linkJaws) {
-              state.jawBlank.left = { ...state.jawBlank.right };
-            }
           }
 
           state.jawProfile.generated = false;
@@ -227,14 +220,13 @@ export const useSoftJawsStore = create<SoftJawsStore>()(
           // Invalidate when a CSG-input field changes, but allow the
           // hook to set `generated: true` after a successful run.
           const csgInputChanged =
-            (config.clearance !== undefined && config.clearance !== state.jawProfile.clearance) ||
             (config.depth     !== undefined && config.depth     !== state.jawProfile.depth) ||
             (config.leftDepth !== undefined && config.leftDepth !== state.jawProfile.leftDepth) ||
-            (config.rightDepth !== undefined && config.rightDepth !== state.jawProfile.rightDepth);
+            (config.rightDepth !== undefined && config.rightDepth !== state.jawProfile.rightDepth) ||
+            (config.tolerance !== undefined && config.tolerance !== state.jawProfile.tolerance);
           Object.assign(state.jawProfile, config);
           if (csgInputChanged && config.generated !== true) {
             state.jawProfile.generated = false;
-            state.jawProfile.ghostWorkpiece = false;
           }
         }),
 

@@ -49,11 +49,11 @@ export function JawProfileStepContent() {
     if (!activePart || partSpanX === null) return { leftOverlap: 0, rightOverlap: 0 };
     const innerX = bracketInnerX(viseConfig);
     const leftFaceXActual = -innerX + jawBlank.left.thickness;
-    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false });
+    const rightInnerXActual = rightBracketInnerX(viseConfig, jawBlank, activePart, { ...jawProfile, generated: false }, jawBlank.clearance);
     const rightFaceXActual = rightInnerXActual - jawBlank.right.thickness;
     
     const leftFaceXDefault = -innerX + jawBlank.left.thickness;
-    const snapX = leftFaceXDefault - jawProfile.depth + partSpanX / 2;
+    const snapX = leftFaceXDefault + jawBlank.clearance + partSpanX / 2;
     const partCenterWorldX = snapX + activePart.transform.position.x;
     
     const partLeftEdgeX = partCenterWorldX - partSpanX / 2;
@@ -123,6 +123,35 @@ export function JawProfileStepContent() {
         </div>
       )}
 
+      {/* ── Pocket Tolerance ───────────────────────────────────────── */}
+      {activePart && (
+        <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            Pocket Tolerance
+          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-medium text-foreground">Fit Tolerance</span>
+              <p className="text-[9px] text-muted-foreground/50 font-tech leading-relaxed">
+                Free space added around the workpiece profile on the pocket cut.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                max={2}
+                step={0.05}
+                value={jawProfile.tolerance}
+                onChange={(e) => updateJawProfile({ tolerance: parseFloat(e.target.value) || 0 })}
+                className="w-28 rounded border border-input/60 bg-background/50 px-2 py-1 text-right text-xs font-tech outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              <span className="text-[10px] text-muted-foreground/60 font-tech w-4">mm</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 3D Viewport Controls ──────────────────────────────────── */}
       {activePart && (
         <div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-background/50 p-4 tech-glass">
@@ -131,28 +160,18 @@ export function JawProfileStepContent() {
           </p>
           <div className="flex flex-col gap-2.5">
             <label className="flex items-center justify-between text-xs cursor-pointer select-none">
-              <span className="text-muted-foreground font-tech">Show Workpiece</span>
+              <span className="text-muted-foreground font-tech">Hide Model</span>
               <input
                 type="checkbox"
-                checked={jawProfile.showWorkpiece ?? true}
-                onChange={(e) => updateJawProfile({ showWorkpiece: e.target.checked })}
+                checked={jawProfile.hideModel ?? false}
+                onChange={(e) => updateJawProfile({ hideModel: e.target.checked })}
                 className="h-3.5 w-3.5 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer"
-              />
-            </label>
-            <label className={`flex items-center justify-between text-xs select-none transition-opacity ${!(jawProfile.showWorkpiece ?? true) ? 'opacity-40 pointer-events-none' : 'cursor-pointer'}`}>
-              <span className="text-muted-foreground font-tech">Ghost Mode (Transparent)</span>
-              <input
-                type="checkbox"
-                checked={jawProfile.ghostWorkpiece ?? false}
-                disabled={!(jawProfile.showWorkpiece ?? true)}
-                onChange={(e) => updateJawProfile({ ghostWorkpiece: e.target.checked })}
-                className="h-3.5 w-3.5 rounded border-input/60 bg-background/50 text-primary focus:ring-1 focus:ring-primary/40 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed"
               />
             </label>
           </div>
           {profileGenerated && (
             <p className="text-[9.5px] text-primary/80 font-tech leading-relaxed pl-1 border-l-2 border-primary/40 mt-1">
-              💡 Enable <strong>Ghost Mode</strong> or hide the workpiece to inspect the pocket cavities cut into the jaws.
+              💡 Toggle <strong>Hide Model</strong> to inspect the pocket cavities cut into the jaws.
             </p>
           )}
         </div>
@@ -173,7 +192,7 @@ export function JawProfileStepContent() {
             <span>Profile generated — visible in the 3D viewport.</span>
             {faceCount != null && (
               <span className="text-[10px] text-green-700/80 dark:text-green-300/70 font-tech">
-                {faceCount.toLocaleString()} triangles across both jaws · pocket {jawProfile.depth} mm deep · {jawProfile.clearance} mm clearance
+                {faceCount.toLocaleString()} triangles across both jaws · {jawProfile.tolerance} mm tolerance
               </span>
             )}
           </div>

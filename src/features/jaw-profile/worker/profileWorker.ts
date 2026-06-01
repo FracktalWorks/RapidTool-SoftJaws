@@ -3,6 +3,7 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Brush, Evaluator, SUBTRACTION, INTERSECTION, ADDITION } from 'three-bvh-csg';
 import { extractSilhouetteContour } from '../../../../packages/cad-core/src/sweep/sweepProcessor';
 import { suppressDeprecatedMaxLeafTrisWarning } from '../../../../packages/cad-core/src/workers/suppressBvhWarnings';
+import { repairMeshForExport } from '../../../../packages/cad-core/src/mesh/manifoldMeshService';
 
 suppressDeprecatedMaxLeafTrisWarning();
 
@@ -105,6 +106,7 @@ function inflateGeometry(geometry: THREE.BufferGeometry, offset: number): THREE.
   geo.computeVertexNormals();
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const nor = geo.getAttribute('normal') as THREE.BufferAttribute;
+  if (!pos || !nor) return geo;
   const arr = pos.array as Float32Array;
   const nArr = nor.array as Float32Array;
   for (let i = 0; i < pos.count; i++) {
@@ -391,12 +393,18 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
 
       // Extract clipped vertices for the sweep
       let clippedVerts: Float32Array;
-      if (croppedPartGeo.index) {
+      const posAttr = croppedPartGeo.getAttribute('position');
+      if (!posAttr || posAttr.count === 0) {
+        clippedVerts = new Float32Array(0);
+      } else if (croppedPartGeo.index) {
         const nonIndexedGeo = croppedPartGeo.toNonIndexed();
-        clippedVerts = new Float32Array(nonIndexedGeo.getAttribute('position').array);
+        const nonIndexedPos = nonIndexedGeo.getAttribute('position');
+        clippedVerts = nonIndexedPos
+          ? new Float32Array(nonIndexedPos.array)
+          : new Float32Array(0);
         nonIndexedGeo.dispose();
       } else {
-        clippedVerts = new Float32Array(croppedPartGeo.getAttribute('position').array);
+        clippedVerts = new Float32Array(posAttr.array);
       }
 
       // Clean up partGeo
@@ -576,6 +584,22 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
         finalResultGeo = mergeVertices(finalResult.geometry, 1e-4);
         finalResultGeo.computeVertexNormals();
 
+        // ── Manifold repair pass ──────────────────────────────────────────────
+        // Guarantees watertight, CAM-safe output. Runs WASM in this worker thread
+        // (no UI blocking). Falls back gracefully if Manifold3D fails.
+        try {
+          const repairResult = await repairMeshForExport(finalResultGeo);
+          if (repairResult.success && repairResult.geometry) {
+            finalResultGeo.dispose();
+            finalResultGeo = repairResult.geometry;
+            console.log(`[profileWorker] manifold repair (main): ${repairResult.repairSteps.join(' | ')} — manifold=${repairResult.isManifold}`);
+          } else {
+            console.warn('[profileWorker] manifold repair returned no geometry, keeping merged result');
+          }
+        } catch (repairErr) {
+          console.warn('[profileWorker] manifold repair threw, keeping merged result:', repairErr);
+        }
+
         // Clean up
         cutterGeometry.dispose();
         slabGeo.dispose();
@@ -653,6 +677,20 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
       finalResultGeo = mergeVertices(finalResult.geometry, 1e-4);
       finalResultGeo.computeVertexNormals();
 
+      // ── Manifold repair pass (fallback path) ──────────────────────────────
+      try {
+        const repairResult = await repairMeshForExport(finalResultGeo);
+        if (repairResult.success && repairResult.geometry) {
+          finalResultGeo.dispose();
+          finalResultGeo = repairResult.geometry;
+          console.log(`[profileWorker] manifold repair (fallback): ${repairResult.repairSteps.join(' | ')} — manifold=${repairResult.isManifold}`);
+        } else {
+          console.warn('[profileWorker] manifold repair (fallback) returned no geometry, keeping merged result');
+        }
+      } catch (repairErr) {
+        console.warn('[profileWorker] manifold repair (fallback) threw, keeping merged result:', repairErr);
+      }
+
       blankGeo.dispose();
       extrudeGeo.dispose();
       if (finalResultGeo !== finalResult.geometry) {
@@ -663,15 +701,21 @@ self.onmessage = async (e: MessageEvent<ProfileWorkerInput>) => {
     if (!finalResultGeo) throw new Error('CSG failed to produce geometry.');
 
     // ── 8. Extract output arrays ──
+    const posAttr = finalResultGeo.getAttribute('position');
+    if (!posAttr) {
+      throw new Error('finalResultGeo position attribute is missing!');
+    }
+
     if (!finalResultGeo.index) {
-      const n = finalResultGeo.getAttribute('position').count;
+      const n = posAttr.count;
       const idx = new Uint32Array(n);
       for (let i = 0; i < n; i++) idx[i] = i;
       finalResultGeo.setIndex(new THREE.BufferAttribute(idx, 1));
     }
 
-    const posArray  = new Float32Array(finalResultGeo.getAttribute('position').array);
-    const normArray = new Float32Array(finalResultGeo.getAttribute('normal').array);
+    const posArray  = new Float32Array(posAttr.array);
+    const normAttr  = finalResultGeo.getAttribute('normal');
+    const normArray = normAttr ? new Float32Array(normAttr.array) : new Float32Array(posArray.length);
     const idxArray  = new Uint32Array(finalResultGeo.index!.array);
     finalResultGeo.dispose();
 

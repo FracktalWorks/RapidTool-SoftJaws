@@ -25,7 +25,7 @@ import { useSoftJawsStore } from '@/stores/softJawsStore';
 import { useViseStore } from '@/stores/viseStore';
 import { geometryCache } from '@/stores/geometryCache';
 import { jawBaseH, bracketInnerX } from '@/features/vise-config/data/presets';
-import { computeWorldSpanX, effectiveOverlap, partSnapX } from '@/utils/partGeometry';
+import { computeWorldSpanX, computeWorldSpanY, effectiveOverlap, partSnapX, RAIL_GAP_MM } from '@/utils/partGeometry';
 import type { ProcessedPart } from '@/stores/types';
 
 const PART_COLORS = [
@@ -63,8 +63,7 @@ function PartMesh({
   const jawBlank = useSoftJawsStore((s) => s.jawBlank);
   const viseConfig = useViseStore((s) => s.viseConfig);
 
-  const showWorkpiece = jawProfile.showWorkpiece ?? true;
-  const ghostWorkpiece = jawProfile.ghostWorkpiece ?? false;
+  const showWorkpiece = !(jawProfile.hideModel ?? false);
 
 
   // Track whether SelectableTransformControls currently owns the mesh transform.
@@ -103,9 +102,9 @@ function PartMesh({
   }, [geometry]);
 
   const { position: pos, rotation: rot } = part.transform;
-  const partHeight = part.boundingBox.max[1] - part.boundingBox.min[1];
-  // Y where part bottom touches the jaw rail surface
-  const baseY = jawBaseH(viseJawHeight) + partHeight / 2;
+  const partHeight = computeWorldSpanY(part);
+  // Y where part bottom floats RAIL_GAP_MM above the jaw rail surface
+  const baseY = jawBaseH(viseJawHeight) + RAIL_GAP_MM + partHeight / 2;
 
   // X position: left edge of the centered geometry must touch the fixed left jaw's clamping face.
   // The geometry useMemo above centers the mesh, so local X goes from -partWidth/2 to +partWidth/2.
@@ -114,14 +113,14 @@ function PartMesh({
   // DESIGN snapX: Always uses the design-time jawOverlap. This is the source of truth
   // for the store and CSG subtraction.
   const designSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, { ...jawProfile, generated: false });
-  }, [viseConfig, jawBlank.left.thickness, jawProfile, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, { ...jawProfile, generated: false }, jawBlank.clearance);
+  }, [viseConfig, jawBlank.left.thickness, jawBlank.clearance, jawProfile, part]);
 
   // RENDER snapX: Uses the effective (possibly shifted) overlap. This is what
   // the user sees in the 3D viewport.
   const renderSnapX = useMemo(() => {
-    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile);
-  }, [viseConfig, jawBlank.left.thickness, jawProfile, part]);
+    return partSnapX(viseConfig, jawBlank.left.thickness, part, jawProfile, jawBlank.clearance);
+  }, [viseConfig, jawBlank.left.thickness, jawBlank.clearance, jawProfile, part]);
 
   // ── Imperatively sync mesh transform from store (only when gizmo is idle) ─
   useLayoutEffect(() => {
@@ -219,8 +218,6 @@ function PartMesh({
           side={THREE.DoubleSide}
           emissive={isActive ? color : '#000000'}
           emissiveIntensity={isActive ? 0.1 : 0}
-          transparent={ghostWorkpiece}
-          opacity={ghostWorkpiece ? 0.25 : 1.0}
         />
       </mesh>
     </SelectableTransformControls>

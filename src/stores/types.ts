@@ -58,27 +58,27 @@ export interface JawDimensions {
 export interface JawBlankConfig {
   left: JawDimensions;
   right: JawDimensions;
-  linkJaws: boolean;
   material: string;
+  clearance: number;
   isDragging?: boolean;
 }
 
 export interface UpdateJawBlankConfig {
   left?: Partial<JawDimensions>;
   right?: Partial<JawDimensions>;
-  linkJaws?: boolean;
   material?: string;
+  clearance?: number;
   isDragging?: boolean;
 }
 
 export interface JawProfileConfig {
-  clearance: number;
   depth: number; // default depth
   leftDepth: number;
   rightDepth: number;
   generated: boolean;
-  showWorkpiece?: boolean;
-  ghostWorkpiece?: boolean;
+  hideModel?: boolean;
+  /** Pocket tolerance — CSG cutter inflation for machining fit (mm). */
+  tolerance: number;
 }
 
 export interface GripFeaturesConfig {
